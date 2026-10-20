@@ -1,0 +1,23 @@
+# Only Postgres runs in Docker. Next.js runs directly on Windows.
+# Port 5434 on your PC -> 5432 in the container, so it never clashes with Oppora (5432) or HomeHaat (5433).
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: guardrail-db
+    environment:
+      POSTGRES_DB: guardrail
+      POSTGRES_USER: guardrail
+      POSTGRES_PASSWORD: guardrail   # local-only container, not reachable from the internet
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - guardrail-pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guardrail -d guardrail"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  guardrail-pgdata:

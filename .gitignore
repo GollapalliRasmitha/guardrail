@@ -1,0 +1,34 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node / Next.js
+/node_modules
+/.next/
+/.next-e2e/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+
+# Tests
+/coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Vercel
+.vercel
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.pem
+npm-debug.log*
+
+# Claude Code local preview config
+.claude/
