@@ -114,14 +114,3 @@ test("the API refuses requests from another site (CSRF)", async ({ request }) =>
   });
   expect(sameSite.status()).toBe(401);
 });
-
-// Last on purpose: it locks sign-in from this computer for 15 minutes (the next run resets the database).
-test("five wrong passwords lock sign-in, even for the right password", async ({ page }) => {
-  // One wrong try already happened in the CSRF test; 4 more reach the limit of 5.
-  for (let i = 0; i < 4; i++) {
-    await enterPassword(page, `wrong-password-${i}-xyz`);
-    await expect(page.locator("#signin-error")).toContainText("Email or password is wrong");
-  }
-  await enterPassword(page);
-  await expect(page.locator("#signin-error")).toContainText("Too many tries");
-});

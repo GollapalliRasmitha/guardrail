@@ -1,23 +1,24 @@
-import { Activity, Bell, KeyRound, Server, ShieldCheck } from "lucide-react";
+import { Activity, ArrowRight, Bell, KeyRound, Server, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
+import { LiveEventList } from "@/components/events/LiveEventList";
+import { SourceStatus } from "@/components/events/SourceStatus";
 import { PageHeader } from "@/components/shell/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Mono } from "@/components/ui/Mono";
 import { Panel } from "@/components/ui/Panel";
 import { StatCard } from "@/components/ui/StatCard";
 import { requireActiveSession } from "@/lib/auth/guards";
-import { securityOverview } from "@/lib/dashboard/overview";
+import { overviewStats } from "@/lib/dashboard/overview";
+import { latestEvents } from "@/lib/events/query";
+import { SOURCE_INFO, SOURCES } from "@/lib/events/types";
+import { formatCount } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Overview" };
 
-const SOURCES = [
-  { name: "HomeHaat", host: "homehaat.vercel.app", stage: 3 },
-  { name: "Oppora", host: "oppora-app.vercel.app", stage: 5 },
-];
-
 export default async function OverviewPage() {
   const { user, session } = await requireActiveSession();
-  const stats = await securityOverview(user.id);
+  const [stats, latest] = await Promise.all([overviewStats(user.id), latestEvents(8)]);
 
   return (
     <>
@@ -26,8 +27,8 @@ export default async function OverviewPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Events · 24 h"
-          value={null}
-          note="No sources connected yet"
+          value={formatCount(stats.events24h)}
+          note={stats.sourcesOnline === 0 ? "No source has sent anything today" : "From all sources"}
           icon={<Activity className="size-4" />}
         />
         <StatCard
@@ -38,8 +39,8 @@ export default async function OverviewPage() {
         />
         <StatCard
           label="Sources online"
-          value={`0 / ${SOURCES.length}`}
-          note="HomeHaat and Oppora"
+          value={`${stats.sourcesOnline} / ${SOURCES.length}`}
+          note="Sent an event in the last 24 h"
           icon={<Server className="size-4" />}
         />
         <StatCard
@@ -52,11 +53,28 @@ export default async function OverviewPage() {
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <Panel title="Live events">
-            <EmptyState icon={<Activity className="size-6" />} title="Waiting for the first event">
-              When HomeHaat and Oppora start sending signed events, they appear here the moment they arrive.
-            </EmptyState>
+        <div className="min-w-0 xl:col-span-2">
+          <Panel
+            title="Live events"
+            action={
+              <Link
+                href="/dashboard/events"
+                className="inline-flex items-center gap-1 text-sm text-accent hover:underline"
+              >
+                All events <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            }
+          >
+            <LiveEventList
+              initial={latest}
+              max={8}
+              caption="Latest security events"
+              empty={
+                <EmptyState icon={<Activity className="size-6" />} title="Waiting for the first event">
+                  When HomeHaat and Oppora send signed events, they appear here the moment they arrive.
+                </EmptyState>
+              }
+            />
           </Panel>
         </div>
 
@@ -64,17 +82,12 @@ export default async function OverviewPage() {
           <Panel title="Sources">
             <ul className="divide-y divide-line">
               {SOURCES.map((s) => (
-                <li
-                  key={s.name}
-                  className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                >
+                <li key={s} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0">
-                    <p className="font-medium">{s.name}</p>
-                    <Mono className="block truncate text-muted">{s.host}</Mono>
+                    <p className="font-medium">{SOURCE_INFO[s].name}</p>
+                    <Mono className="block truncate text-muted">{SOURCE_INFO[s].host}</Mono>
                   </div>
-                  <span className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-xs text-muted">
-                    Not connected
-                  </span>
+                  <SourceStatus {...stats.sources[s]} />
                 </li>
               ))}
             </ul>

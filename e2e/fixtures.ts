@@ -12,4 +12,6 @@ export const E2E_ADMIN = {
 export const E2E_KEYS = {
   ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
   HASH_SECRET: Buffer.alloc(32, 9).toString("base64"),
+  INGEST_SECRET_HOMEHAAT: "e2e-homehaat-signing-secret-0123456789abcdef",
+  INGEST_SECRET_OPPORA: "e2e-oppora-signing-secret-0123456789abcdef",
 };

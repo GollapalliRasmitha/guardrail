@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
-import { LiveDot } from "@/components/ui/LiveDot";
+import { LiveStatus } from "@/components/live/LiveStatus";
 import { MobileNav } from "./MobileNav";
 import { NavLinks } from "./NavLinks";
 import { SignOutButton } from "./SignOutButton";
@@ -40,8 +40,8 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
               <Logo />
             </Link>
           </div>
-          {/* Stage 2 connects this to the live event stream. */}
-          <LiveDot state="idle" />
+
+          <LiveStatus />
         </header>
         <main id="main" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-6 outline-none sm:px-6 sm:py-8">
           {children}

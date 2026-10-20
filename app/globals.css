@@ -101,6 +101,16 @@ body {
   }
 }
 
+/* A new live row glows teal, then fades back. */
+@keyframes flash {
+  from {
+    background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

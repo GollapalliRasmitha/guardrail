@@ -7,11 +7,19 @@ const base64Key = z
   .min(1, "is empty")
   .refine((v) => Buffer.from(v, "base64").length === 32, "must be 32 random bytes in base64");
 
+// A source's signing secret. Empty or missing = that source is switched off (its requests are refused).
+const ingestSecret = z.preprocess(
+  (v) => (v === "" ? undefined : v),
+  z.string().min(32, "must be at least 32 characters").optional(),
+);
+
 const schema = z.object({
   DATABASE_URL: z.url(),
   APP_URL: z.url(),
   ENCRYPTION_KEY: base64Key,
   HASH_SECRET: base64Key,
+  INGEST_SECRET_HOMEHAAT: ingestSecret,
+  INGEST_SECRET_OPPORA: ingestSecret,
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 

@@ -1,4 +1,18 @@
-import { bigint, bigserial, boolean, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  bigserial,
+  boolean,
+  index,
+  inet,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { EVENT_TYPES, SOURCES } from "@/lib/events/types";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
@@ -52,3 +66,52 @@ export const authAttempt = pgTable(
 
 export type AdminUser = typeof adminUser.$inferSelect;
 export type Session = typeof session.$inferSelect;
+
+// ---- Stage 2: events -------------------------------------------------------------------------------------------
+
+/** One security event from HomeHaat or Oppora. Personal data is masked or hashed before it gets here. */
+export const event = pgTable(
+  "event",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(), // also the live-stream cursor (always increasing)
+    source: text("source", { enum: SOURCES }).notNull(),
+    type: text("type", { enum: EVENT_TYPES }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    ip: inet("ip"), // wiped after 30 days (Stage 6); ip_hash stays for counting
+    ipHash: text("ip_hash"),
+    country: text("country"), // 2 letters, e.g. "IN"
+    actor: text("actor"), // masked: "ra****@gmail.com"
+    path: text("path"), // no query string
+    method: text("method"),
+    statusCode: integer("status_code"),
+    userAgent: text("user_agent"),
+    meta: jsonb("meta").$type<Record<string, string | number | boolean>>().notNull().default({}),
+  },
+  (t) => [
+    index("event_source_time_idx").on(t.source, t.occurredAt),
+    index("event_type_time_idx").on(t.type, t.occurredAt),
+    index("event_ip_hash_time_idx").on(t.ipHash, t.occurredAt),
+    index("event_received_idx").on(t.receivedAt),
+  ],
+);
+
+/**
+ * Every nonce a source has used. The UNIQUE (source, nonce) makes Postgres itself refuse a replayed request,
+ * even if two copies arrive at the same moment. Rows older than 10 minutes are deleted (their timestamp is
+ * already outside the 5-minute window, so they can't be replayed anyway).
+ */
+export const ingestNonce = pgTable(
+  "ingest_nonce",
+  {
+    source: text("source", { enum: SOURCES }).notNull(),
+    nonce: text("nonce").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.source, t.nonce] }),
+    index("ingest_nonce_time_idx").on(t.source, t.createdAt),
+  ],
+);
+
+export type EventRow = typeof event.$inferSelect;

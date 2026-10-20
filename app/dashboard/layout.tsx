@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { LiveProvider } from "@/components/live/LiveProvider";
 import { AppShell } from "@/components/shell/AppShell";
 import { requireActiveSession } from "@/lib/auth/guards";
+import { latestEventId } from "@/lib/events/query";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
@@ -8,5 +10,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Checked here for the frame AND again in every page/API route: a layout check alone isn't enough, because
   // Next.js can render a page without re-running its parent layout on client navigation.
   const { user } = await requireActiveSession();
-  return <AppShell email={user.email}>{children}</AppShell>;
+  // The live feed starts after the newest event that already exists, so pages don't get duplicates.
+  const cursor = await latestEventId();
+  return (
+    <LiveProvider initialCursor={cursor}>
+      <AppShell email={user.email}>{children}</AppShell>
+    </LiveProvider>
+  );
 }

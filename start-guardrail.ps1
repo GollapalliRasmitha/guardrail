@@ -16,7 +16,7 @@ Set-Location $root
 
 function Step($text) { Write-Host ""; Write-Host "==> $text" -ForegroundColor Cyan }
 function Fail($text) { Write-Host ""; Write-Host "X $text" -ForegroundColor Red; exit 1 }
-function RandomKey() {
+function RandomKey() {  # 32 random bytes as base64
     $bytes = New-Object byte[] 32
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     return [Convert]::ToBase64String($bytes)
@@ -60,6 +60,16 @@ if (-not (Test-Path $envFile)) {
 } else {
     Write-Host ".env found."
 }
+# Settings added in later stages: give any that are missing or empty a fresh random value.
+# (Keeps an older .env working without editing it by hand.)
+$lines = [System.Collections.Generic.List[string]](Get-Content $envFile)
+foreach ($name in "INGEST_SECRET_HOMEHAAT", "INGEST_SECRET_OPPORA") {
+    if ($lines | Where-Object { $_ -match "^$name=\S" }) { continue }
+    $lines.RemoveAll([Predicate[string]] { param($l) $l -match "^$name=\s*$" }) | Out-Null
+    $lines.Add("$name=$(RandomKey)")
+    Write-Host "Added $name to .env (random value)."
+}
+[System.IO.File]::WriteAllText($envFile, ($lines -join "`n") + "`n")
 
 # --- 3. Postgres ----------------------------------------------------------------
 Step "Starting Postgres (Docker, port 5434)"

@@ -108,12 +108,14 @@ installs packages, runs migrations and opens the app on http://localhost:3100.
 - `session` — `token_hash` (SHA-256 of a random cookie token; the raw token is never stored), user, `mfa_passed`,
   `expires_at`, `last_seen_at`, `ip_hash`, `user_agent`.
 - `auth_attempt` — sign-in attempts for the rate limit: `ip_hash`, `email_hash`, `kind`, `ok`, `created_at`.
-- `source` (Stage 2) — `homehaat`, `oppora`: name, `key_id`, **no secret in the database** (secrets live in env
-  vars `INGEST_SECRET_HOMEHAAT`, `INGEST_SECRET_OPPORA`), `last_seen_at`.
+- Sources (Stage 2) — `homehaat`, `oppora`: a fixed list in code (`lib/events/types.ts`), not a table. **No secret in the
+  database**: secrets live in env vars `INGEST_SECRET_HOMEHAAT`, `INGEST_SECRET_OPPORA`. "Last seen" is computed from
+  `event.received_at`.
+- `ingest_nonce` (Stage 2) — `(source, nonce)` primary key: every nonce used in the last 10 minutes (replay protection).
 - `event` (Stage 2) — id, source, `type` (enum, Section 5), `occurred_at`, `received_at`, `ip` (nullable, wiped after
   30 days), `ip_hash` (kept for counting), `country` (2-letter), `actor` (masked email), `path`, `method`,
-  `status_code`, `user_agent` (trimmed), `meta` (small JSONB, allow-listed keys only), `nonce` (unique per source:
-  replay protection).
+  `status_code`, `user_agent` (trimmed), `meta` (small JSONB, allow-listed keys only). Paths are stored without
+  their query string (it can hold tokens).
 - `alert` (Stage 4) — rule id, MITRE technique, severity, status (open / acknowledged / resolved), title, `group_key`
   (e.g. rule + IP, so repeats update one alert instead of creating 100), first/last seen, event count,
   `emailed_at`.
