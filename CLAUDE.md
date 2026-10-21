@@ -5,8 +5,8 @@ HMAC-signed security events; GuardRail runs MITRE ATT&CK-mapped detection rules,
 live. Full brief and stage plan: `PROMPT.md`. Next.js 16 notes for agents: `AGENTS.md` (read the bundled docs in
 `node_modules/next/dist/docs/` before using a Next.js API; this version differs from older ones).
 
-**Current stage: 2 of 7 done — signed ingest API (HMAC + timestamp + nonce) and live events (SSE).
-Next: Stage 3 (HomeHaat sends events, local first, + attack simulator). Waiting for Rasmitha to say "continue".**
+**Current stage: 3 of 7 done — HomeHaat sends signed events (background, 2 s timeout, outbox + retry, off switch)
+and the localhost-only attack simulator. Next: Stage 4 (detection rules + alerts + email). Waiting for "continue".**
 
 ---
 
@@ -47,7 +47,14 @@ npm run db:migrate             # applies migrations to DATABASE_URL
 npm run throwaway-check        # exits with an error unless DATABASE_URL is guardrail_e2e on localhost
 npm run send-test-event        # signed test event(s) to the LOCAL app; options: --source oppora --type suspicious_path
                                #   --count 5 --replay --bad-signature --stale  (refuses any non-localhost APP_URL)
+npm run connect:homehaat       # writes GUARDRAIL_* (+ a local PROXY_SECRET / RAZORPAY_WEBHOOK_SECRET if empty) into
+                               #   ../homehaat/.env; values never printed; then restart HomeHaat
+npm run simulate               # attacks LOCAL HomeHaat (Django :8000): brute-force, stuffing, scan, flood, forged-webhook
+                               #   --scenario <one> --target http://localhost:8000 (refuses anything not localhost)
 ```
+
+**Local run with HomeHaat:** start GuardRail (3100) and HomeHaat (Django 8000), run `npm run connect:homehaat` once
+(and restart HomeHaat), then `npm run simulate`; the events appear live on /dashboard/events.
 
 **Ports:** Postgres **5434** (HomeHaat 5433, Oppora 5432), app **3100**, end-to-end copy **3101**. All three
 projects can run at the same time.
@@ -108,7 +115,9 @@ guardrail/
     api/events.ts           typed eventsAfter() for the polling fallback
     format.ts               formatTime (IST, same on server and browser), formatCount (Indian grouping)
     safety.ts               assertThrowaway()
-  scripts/                  migrate, admin-create, admin-reset-2fa, throwaway-check, send-test-event, prompt
+    simulator/target.ts     assertLocalTarget (localhost only, URL-parsed) + testNetIp (documentation IPs) [KEY LOGIC]
+  scripts/                  migrate, admin-create, admin-reset-2fa, throwaway-check, send-test-event, prompt,
+                            simulate (attack scenarios), connect-homehaat (writes HomeHaat's local .env)
   e2e/                      Playwright, run in file order: 01-auth, 02-ingest, 03-live, 99-lockout (locks sign-in, so
                             last); fixtures.ts (test values), helpers.ts (signInAsAdmin, sendSigned), global-setup.ts
                             (resets guardrail_e2e, warms up pages)
@@ -213,6 +222,17 @@ its signature instead.
 - `.env` gained `INGEST_SECRET_HOMEHAAT` / `INGEST_SECRET_OPPORA`; `start-guardrail.ps1` now adds any missing setting
   to an existing `.env` with a random value.
 - Test IPs come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`), never real people.
+- **HomeHaat's side (Stage 3) lives in the homehaat repo:** `backend/guardrail/` (client, signals, middleware,
+  OutboxEvent) + one-line `report(...)` calls in `payments/views.py` and `payments/refunds.py`, a `guardrail` job in
+  `core/jobs.py` (also added to the hourly GitHub Actions run), `core/client_ip.client_country`, and
+  `frontend/proxy.ts` passes Vercel's `x-vercel-ip-country`. HomeHaat has no password reset, so it never sends
+  `password_reset_*`; `new_device_login` is left to GuardRail's T1078 rule (Stage 4), which compares IPs per account.
+- **Scanner paths on the live site:** Vercel serves HomeHaat's pages and only `/api/*` reaches Django, so
+  `suspicious_path` covers scans of the API and of the Render address directly. Scans of page URLs on Vercel aren't
+  seen (a later improvement could report them from `frontend/proxy.ts`).
+- **The simulator fakes attacker IPs only through HomeHaat's own `PROXY_SECRET` header**, read from HomeHaat's local
+  `.env` (never printed). Without it every request comes from 127.0.0.1. It signs in through Django's real CSRF flow
+  and rate limits, so the events are exactly what a real attack would produce.
 
 ---
 
@@ -439,6 +459,66 @@ when an event arrives" isn't possible inside the app. Instead:
 > so it's gap-free and stays inside Vercel's free limits. One shared connection per tab, polling as a fallback, and
 > it pauses when the tab is hidden."
 
+### 13. Monitoring that can't hurt the site — HomeHaat `backend/guardrail/client.py` [KEY LOGIC]
+
+**The rule:** HomeHaat's visitors must never wait for, or see an error from, GuardRail.
+
+```
+view / signal / middleware ─► report("login_failed", request, actor=email)   ← returns at once, never raises
+                                   puts a small, already-masked event in an in-memory queue
+background thread ─► batch of ≤50 ─► sign (HMAC) ─► POST /api/ingest, timeout 2 s
+     ├─ 2xx            → done; also sends up to 100 waiting events from the outbox
+     ├─ down / 5xx / 429 → saved in the OutboxEvent table (max 5,000, oldest dropped first)
+     └─ other 4xx      → GuardRail refused them and would again → dropped + logged
+scheduled job "guardrail" (hourly GitHub Actions → core/jobs.py) ─► flush_outbox()
+```
+- `report()` only builds the event and puts it in the queue, inside `try/except`. The network call happens in a
+  separate background (daemon) thread.
+- **Privacy at the source:** `build_event` masks the email, cuts the path at `?`, trims the user agent and keeps only
+  allow-listed `meta`. GuardRail does it again (defence in depth).
+- **Retries are safe:** each retry is a new signed request with a new nonce. `select_for_update(skip_locked=True)`
+  means the job and the thread never send the same rows twice. Rows older than 7 days or tried 20 times are dropped.
+- **Off switch:** nothing happens unless `GUARDRAIL_ENABLED=true` + `GUARDRAIL_URL` + a 32+ character
+  `GUARDRAIL_SECRET` are all set.
+- **Where events come from:**
+  - Django's own `user_login_failed` / `user_logged_in` signals: the API sign-in AND the Django admin, with no view
+    changed (Django blanks the password before sending the signal).
+  - A middleware that only *reads* responses: scanner paths, any 429, a 403 for a signed-in user or a wrong jobs
+    secret.
+  - One line each in the Razorpay webhook (bad signature, `payment.failed`, amount mismatch), the checkout verify
+    (bad signature) and refunds (`transaction.on_commit`, so a rolled-back refund is never reported).
+- **Proven:** 30 HomeHaat tests (signature matches GuardRail's reference value; GuardRail down / 5xx / 429 → outbox;
+  4xx → dropped; outbox cap; switched off → nothing sent; sign-in answers unchanged). And by hand: with GuardRail
+  stopped, HomeHaat still answered in ~0.2 s, 11 events waited in the outbox, and the job delivered all 11 once
+  GuardRail was back. That manual run also found two real issues, now fixed: the new table needs `migrate` (the
+  start script and Render's build do it), and a backlog error after a good send had been logged as "events lost".
+
+> *Say it:* "Monitoring is fire-and-forget: the request only queues a masked event, and a background thread signs and
+> sends batches with a two-second timeout. If GuardRail is down the events wait in an outbox table and a scheduled
+> job retries them, so the site never slows down and nothing is lost. There's an off switch, and tests prove sign-in
+> works the same when GuardRail is down or off."
+
+### 14. The attack simulator's safety guard — `lib/simulator/target.ts` [KEY LOGIC]
+
+- `assertLocalTarget(url)` **parses** the address and allows only `localhost`, `127.0.0.1` or `[::1]` over http(s),
+  with no user name. Matching text would be fooled: in `http://localhost@evil.com` the "localhost" is only a user
+  name and the request goes to `evil.com`; `localhost.evil.com` and `127.0.0.1.nip.io` are real internet domains.
+  Tests try each trick and all three live addresses.
+- Fake attackers use `testNetIp(n)`: addresses from the ranges reserved for documentation (RFC 5737), never real
+  people.
+- The scenarios and what they should trigger in Stage 4:
+
+| Scenario | What it does | Rule |
+|---|---|---|
+| brute-force | 12 wrong passwords on one account, from 3 IPs | T1110 |
+| stuffing | one IP tries 8 different accounts | T1110.004 |
+| scan | one IP asks for 8 scanner paths (`/.env`, `/wp-admin`…) | T1595 |
+| flood | 62 sign-ins in seconds → 52 rate-limited | T1499 |
+| forged-webhook | a fake Razorpay "payment captured" | T1565 |
+
+> *Say it:* "The simulator only attacks localhost. It checks that by parsing the URL rather than matching text, so
+> tricks like a user-name prefix or a look-alike domain are refused, and the tests try each one."
+
 ---
 
 ## Interview notes
@@ -468,6 +548,19 @@ when an event arrives" isn't possible inside the app. Instead:
    (they can contain reset tokens), `meta` only keeps allow-listed keys, IPs are also stored as a keyed hash so the
    raw IP can be deleted after 30 days, and all of it runs on the server even if a sender forgets.
 
+### Stage 3
+1. **How do you make sure monitoring can never slow down or break the site it watches?** The request only puts a
+   masked event in an in-memory queue and returns; a background thread sends batches with a 2-second timeout, and
+   every error is caught. If GuardRail is down, events wait in an outbox table and a scheduled job retries them.
+   Tests, and a real outage I staged, show sign-in answers the same with GuardRail down or switched off.
+2. **How did you capture logins without changing every view?** With Django's `user_login_failed` and
+   `user_logged_in` signals, which fire for the API sign-in and the admin login alike; Django removes the password
+   from the credentials before sending the signal. Scanner paths, rate limits and 403s come from a middleware that
+   only reads the response.
+3. **How do you test attacks safely?** A simulator that only targets localhost (checked by parsing the URL, so
+   `localhost@evil.com` is refused), uses documentation-only IP ranges, and goes through HomeHaat's real CSRF checks
+   and rate limits, so GuardRail sees exactly what a real attack would produce.
+
 ---
 
 ## Stage log
@@ -486,3 +579,8 @@ when an event arrives" isn't possible inside the app. Instead:
   Sources with real numbers; `send-test-event` script (localhost only). 78 unit tests, 19 Playwright tests (ingest
   attacks: forged, other site's secret, stale, replayed, unknown source, oversized; live updates; filters; pages;
   pause when hidden).
+- **Stage 3 (21 Oct 2026):** in HomeHaat, a `backend/guardrail/` app (signed background sender, 2 s timeout,
+  OutboxEvent + retry job, off switch; login signals; read-only middleware; hooks in webhook / verify / refunds;
+  visitor country via the proxy) with 30 new tests (HomeHaat 353 backend tests and 45 frontend tests all pass).
+  In GuardRail, `simulate` (5 scenarios, localhost only) and `connect:homehaat`; 83 unit tests. One simulation
+  delivered all 91 events; in a staged outage HomeHaat was unaffected and the 11 waiting events arrived afterwards.

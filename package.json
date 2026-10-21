@@ -17,7 +17,9 @@
     "admin:reset-2fa": "tsx --env-file-if-exists=.env scripts/admin-reset-2fa.ts",
     "throwaway-check": "tsx --env-file-if-exists=.env scripts/throwaway-check.ts",
     "check": "npm run lint && npm run typecheck && npm test",
-    "send-test-event": "tsx --env-file-if-exists=.env scripts/send-test-event.ts"
+    "send-test-event": "tsx --env-file-if-exists=.env scripts/send-test-event.ts",
+    "simulate": "tsx scripts/simulate.ts",
+    "connect:homehaat": "tsx --env-file-if-exists=.env scripts/connect-homehaat.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

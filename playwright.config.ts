@@ -11,6 +11,7 @@ export default defineConfig({
   retries: 0,
   reporter: [["list"]],
   timeout: 60_000,
+  globalTimeout: 10 * 60_000, // a stuck run fails after 10 minutes instead of hanging
   use: {
     baseURL: E2E_URL,
     trace: "retain-on-failure",
