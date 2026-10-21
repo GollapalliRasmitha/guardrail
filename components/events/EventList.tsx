@@ -1,16 +1,17 @@
 import type { EventView } from "@/lib/events/filters";
 import { formatTime } from "@/lib/format";
 import { EventTypeBadge, SourceBadge } from "./EventBadges";
+import { PathText } from "./PathText";
 
 const fresh = "animate-[flash_2.4s_ease-out]"; // new rows glow teal for a moment (off with reduced motion)
 
 function Where({ e }: { e: EventView }) {
   if (!e.path) return <span className="text-muted">—</span>;
   return (
-    <span className="font-mono text-xs break-all">
-      {e.method && <span className="text-muted">{e.method} </span>}
-      {e.path}
-      {e.statusCode && <span className="text-muted"> · {e.statusCode}</span>}
+    <span className="font-mono text-xs">
+      {e.method && <span className="whitespace-nowrap text-muted">{e.method} </span>}
+      <PathText path={e.path} />
+      {e.statusCode && <span className="whitespace-nowrap text-muted"> · {e.statusCode}</span>}
     </span>
   );
 }
