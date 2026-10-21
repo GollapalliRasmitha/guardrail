@@ -25,14 +25,39 @@ export default async function globalSetup() {
 
   // Warm-up: the dev server compiles each page on its first visit, which can take seconds. Visiting them now
   // keeps that delay out of timed steps (like typing a 2FA code that expires every 30 seconds).
-  const paths = ["/signin", "/setup-2fa", "/dashboard", "/dashboard/events", "/dashboard/settings"];
+  const paths = [
+    "/signin",
+    "/setup-2fa",
+    "/dashboard",
+    "/dashboard/events",
+    "/dashboard/alerts",
+    "/dashboard/alerts/1",
+    "/dashboard/upload",
+    "/dashboard/settings",
+    "/",
+    "/demo",
+    "/demo/events",
+    "/demo/alerts",
+    "/demo/alerts/1",
+  ];
   const apis = [
     "/api/auth/signin",
     "/api/auth/2fa/setup",
     "/api/auth/2fa/setup/confirm",
     "/api/auth/2fa/verify",
   ];
-  for (const path of [...paths, ...apis, "/api/ingest", "/api/stream", "/api/events"]) {
+  for (const path of [
+    ...paths,
+    ...apis,
+    "/api/ingest",
+    "/api/stream",
+    "/api/events",
+    "/api/alerts/1/status",
+    "/api/alerts/1/notes",
+    "/api/logs/analyze",
+    "/api/cron/retention",
+    "/api/public/attacks",
+  ]) {
     await fetch(E2E_URL + path, { redirect: "manual" }).catch(() => undefined);
   }
 }

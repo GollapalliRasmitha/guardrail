@@ -3,17 +3,25 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { LiveStatus } from "@/components/live/LiveStatus";
 import { MobileNav } from "./MobileNav";
+import type { Base } from "./nav";
 import { NavLinks } from "./NavLinks";
 import { SignOutButton } from "./SignOutButton";
 
-/** The dashboard frame: sidebar on desktop (lg+), top bar + slide-in menu on phones and tablets. */
+/**
+ * The dashboard frame: sidebar on desktop (lg+), top bar + slide-in menu on phones and tablets.
+ * Used by the real dashboard and by the demo (`base`); `account` is the bottom of the menu, `banner` a strip on top.
+ */
 export function AppShell({
-  email,
+  base,
+  account,
   openAlerts,
+  banner,
   children,
 }: {
-  email: string;
+  base: Base;
+  account: ReactNode;
   openAlerts: number;
+  banner?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -26,25 +34,21 @@ export function AppShell({
       </a>
 
       <aside className="hidden border-r border-line bg-panel lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:p-4">
-        <Link href="/dashboard" className="mb-8 rounded-md px-2 pt-1" aria-label="GuardRail overview">
+        <Link href={base} className="mb-8 rounded-md px-2 pt-1" aria-label="GuardRail overview">
           <Logo />
         </Link>
         <nav aria-label="Main">
-          <NavLinks openAlerts={openAlerts} />
+          <NavLinks base={base} openAlerts={openAlerts} />
         </nav>
-        <div className="mt-auto border-t border-line pt-3">
-          <p className="truncate px-3 pb-2 font-mono text-xs text-muted" title={email}>
-            {email}
-          </p>
-          <SignOutButton />
-        </div>
+        <div className="mt-auto border-t border-line pt-3">{account}</div>
       </aside>
 
       <div className="min-w-0">
+        {banner}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-ground/85 px-4 backdrop-blur sm:px-6">
           <div className="flex items-center gap-3">
-            <MobileNav email={email} openAlerts={openAlerts} />
-            <Link href="/dashboard" className="rounded-md lg:hidden" aria-label="GuardRail overview">
+            <MobileNav base={base} account={account} openAlerts={openAlerts} />
+            <Link href={base} className="rounded-md lg:hidden" aria-label="GuardRail overview">
               <Logo />
             </Link>
           </div>
@@ -56,6 +60,18 @@ export function AppShell({
         </main>
       </div>
     </div>
+  );
+}
+
+/** The bottom of the dashboard menu: who is signed in, and Sign out. */
+export function AccountFooter({ email }: { email: string }) {
+  return (
+    <>
+      <p className="truncate px-3 pb-2 font-mono text-xs text-muted" title={email}>
+        {email}
+      </p>
+      <SignOutButton />
+    </>
   );
 }
 

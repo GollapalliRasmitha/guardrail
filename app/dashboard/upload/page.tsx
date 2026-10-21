@@ -1,7 +1,6 @@
-import { FileUp } from "lucide-react";
 import type { Metadata } from "next";
+import { LogUpload } from "@/components/logs/LogUpload";
 import { PageHeader } from "@/components/shell/AppShell";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { requireActiveSession } from "@/lib/auth/guards";
 
 export const metadata: Metadata = { title: "Log upload" };
@@ -11,10 +10,11 @@ export default async function UploadPage() {
   return (
     <>
       <PageHeader eyebrow="Offline analysis" title="Log upload" />
-      <EmptyState icon={<FileUp className="size-6" />} title="Log upload is coming">
-        Upload an nginx or Apache access log, or a Linux auth.log, and GuardRail will run the same detection
-        rules on it.
-      </EmptyState>
+      <p className="mb-6 max-w-3xl text-muted">
+        Check a server log with the same six detection rules that watch HomeHaat and Oppora live: brute force,
+        credential stuffing, scanning, request floods and sign-ins from new IPs.
+      </p>
+      <LogUpload />
     </>
   );
 }

@@ -87,7 +87,7 @@ test("phone menu works with the keyboard", async ({ page }) => {
 
   await openMenu.click();
   await menu.getByRole("link", { name: "Events" }).click();
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Events", exact: true })).toBeVisible();
   await expect(menu).toBeHidden();
 });
 

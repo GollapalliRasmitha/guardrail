@@ -1,6 +1,8 @@
 import { ChevronRight } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 import { SourceBadge } from "@/components/events/EventBadges";
+import type { Base } from "@/components/shell/nav";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import type { AlertRow } from "@/lib/db/schema";
 import { ruleFor } from "@/lib/detection/rules";
@@ -8,7 +10,15 @@ import { formatTime } from "@/lib/format";
 import { StatusBadge } from "./StatusBadge";
 
 /** Alerts as a list of links (one layout for phone and desktop: it wraps instead of switching to a table). */
-export function AlertList({ alerts, label }: { alerts: AlertRow[]; label: string }) {
+export function AlertList({
+  alerts,
+  label,
+  base = "/dashboard",
+}: {
+  alerts: AlertRow[];
+  label: string;
+  base?: Base;
+}) {
   return (
     <ul className="divide-y divide-line" aria-label={label}>
       {alerts.map((alert) => {
@@ -16,7 +26,7 @@ export function AlertList({ alerts, label }: { alerts: AlertRow[]; label: string
         return (
           <li key={alert.id}>
             <Link
-              href={`/dashboard/alerts/${alert.id}`}
+              href={`${base}/alerts/${alert.id}` as Route}
               className="group flex items-center gap-3 rounded-lg px-2 py-3 hover:bg-panel-2"
             >
               <div className="min-w-0 flex-1">

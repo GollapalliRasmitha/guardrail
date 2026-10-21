@@ -22,14 +22,20 @@ function friendly(status: number): string {
 /** The ONLY place the frontend calls fetch. Typed in and out; every failure is an ApiError. */
 export async function apiFetch<T>(
   path: `/api/${string}`,
-  init: { method?: "GET" | "POST"; body?: unknown } = {},
+  init: { method?: "GET" | "POST"; body?: unknown; text?: Blob } = {},
 ): Promise<T> {
   let response: Response;
+  // `text` sends a file as it is (plain text); `body` sends JSON.
+  const headers = init.text
+    ? { "Content-Type": "text/plain" }
+    : init.body === undefined
+      ? undefined
+      : { "Content-Type": "application/json" };
   try {
     response = await fetch(path, {
       method: init.method ?? "GET",
-      headers: init.body === undefined ? undefined : { "Content-Type": "application/json" },
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      headers,
+      body: init.text ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
       credentials: "same-origin",
       cache: "no-store",
     });

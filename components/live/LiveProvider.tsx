@@ -7,10 +7,10 @@ import { eventsAfter } from "@/lib/api/events";
 import { ApiError } from "@/lib/api/client";
 import type { EventView } from "@/lib/events/filters";
 
-type Listener = (events: EventView[]) => void;
-type LiveContextValue = { state: LiveState; subscribe: (listener: Listener) => () => void };
+export type Listener = (events: EventView[]) => void;
+export type LiveContextValue = { state: LiveState; subscribe: (listener: Listener) => () => void };
 
-const LiveContext = createContext<LiveContextValue | null>(null);
+export const LiveContext = createContext<LiveContextValue | null>(null);
 
 const POLL_MS = 5_000;
 const SHOW_RECONNECTING_AFTER_MS = 3_000; // the stream closes every ~50 s on purpose; don't flash "Reconnecting"

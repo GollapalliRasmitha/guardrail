@@ -14,4 +14,5 @@ export const E2E_KEYS = {
   HASH_SECRET: Buffer.alloc(32, 9).toString("base64"),
   INGEST_SECRET_HOMEHAAT: "e2e-homehaat-signing-secret-0123456789abcdef",
   INGEST_SECRET_OPPORA: "e2e-oppora-signing-secret-0123456789abcdef",
+  CRON_SECRET: "e2e-cron-secret-0123456789abcdef0123456789",
 };

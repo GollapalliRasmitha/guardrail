@@ -5,9 +5,9 @@ HMAC-signed security events; GuardRail runs MITRE ATT&CK-mapped detection rules,
 live. Full brief and stage plan: `PROMPT.md`. Next.js 16 notes for agents: `AGENTS.md` (read the bundled docs in
 `node_modules/next/dist/docs/` before using a Next.js API; this version differs from older ones).
 
-**Current stage: 5 of 7 done — Oppora sends events too (same sender design as HomeHaat), the simulator attacks
-either site, `connect:oppora`. Next: Stage 6 (charts, log upload, demo mode, 3D landing page, more tests). Waiting
-for "continue". HomeHaat's and Oppora's GuardRail commits stay LOCAL (not pushed) until Stage 7: pushing either
+**Current stage: 6 of 7 done — charts, log upload, 30-day IP wipe, public read-only demo, 3D landing page, 35
+end-to-end tests. Next: Stage 7 (deploy to Vercel + Neon, connect the live sites, README, screenshots). Waiting for
+"continue". HomeHaat's and Oppora's GuardRail commits stay LOCAL (not pushed) until Stage 7: pushing either
 redeploys a live site (Rasmitha: "wait until Stage 7").**
 
 ---
@@ -73,15 +73,19 @@ guardrail/
     layout.tsx              fonts (Chakra Petch / IBM Plex Sans / IBM Plex Mono), reads headers() so every page
                             renders per request (needed for the CSP nonce)
     globals.css             design tokens (CSS variables -> Tailwind names), .grid-ground, .eyebrow, .input
-    page.tsx                public home (Stage 6: 3D globe)
+    page.tsx                public home: hero + 3D globe (HeroGlobe), six flip cards, "How it works", demo links
     signin/, setup-2fa/     sign-in (password -> code) and first-time 2FA setup
     dashboard/              layout.tsx (requireActiveSession + AppShell), page.tsx (Overview), events/, alerts/,
                             sources/, upload/, settings/, loading.tsx (skeleton), error.tsx (retry)
+    demo/                   public read-only demo: layout (banner + DemoLiveProvider), page, events/, alerts/, alerts/[id]
     api/auth/               signin, 2fa/verify, 2fa/setup (+ confirm), signout, signout-all
     api/ingest/             POST: signed events from HomeHaat/Oppora [KEY LOGIC order of checks]
     api/stream/             GET: Server-Sent Events live feed [KEY LOGIC]
     api/events/             GET: a page of events, or ?after= (the live feed's polling fallback)
     api/health/             liveness, no database
+    api/logs/analyze/       POST: a log file (plain text, ≤ 4 MB) → findings; nothing stored [KEY LOGIC]
+    api/cron/retention/     GET: daily clean-up, Bearer CRON_SECRET (Vercel Cron, vercel.json)
+    api/public/attacks/     GET, public: country totals for the globe (≥ 3 per country, no IPs), cached 60 s
     not-found.tsx, icon.svg
   components/
     Logo.tsx                shield mark + wordmark
@@ -98,6 +102,12 @@ guardrail/
     alerts/                 AlertList (links; one layout for phone + desktop), AlertFilterBar (GET form), StatusBadge,
                             AlertActions (status buttons), NoteForm, Timeline (plain-words incident timeline)
     live/RefreshOnEvents.tsx  re-renders server pages ~2.5 s after live events (alerts appear without reload)
+    live/DemoLiveProvider.tsx the demo's fake live feed (same context as LiveProvider; no network)
+    charts/                 EventsChart (hand-drawn SVG stacked bars, hover/keyboard tooltip, table view), TopIps
+    views/                  OverviewView, IncidentView: one layout for the dashboard AND the demo (base="/dashboard"|"/demo")
+    logs/                   LogUpload (site, file / drop / sample), LogResults (what was read + one card per attack)
+    landing/                HeroGlobe (picks 3D or still, feed, glass panels), Globe (Three.js, lazy), StaticGlobe (SVG),
+                            FlipCard (button, aria-pressed)
   lib/
     env.ts                  every setting, validated with Zod (fails loudly, never prints values)
     db/schema.ts            Drizzle tables: admin_user, session, auth_attempt
@@ -137,11 +147,26 @@ guardrail/
     alerts/filters.ts, query.ts  alert list filters (URL) + listAlerts / alertDetail / activeAlertCounts
     auth/api-guard.ts       guardChange(): Origin check + active session for dashboard API changes
     validation/alerts.ts    statusBody, noteBody, alertId
+    dashboard/buckets.ts    hourlyBuckets (24 IST hours, zero-filled), firstBucketStart, niceMax (+ test)
+    dashboard/charts.ts     eventsPerHour, topIps (grouped by ip_hash)
+    logs/parse.ts           parseLine: nginx/Apache access logs + auth.log (sshd) → events [KEY LOGIC]
+    logs/analyze.ts         analyzeLog / analyzeEvents: the SAME rules, in memory, one finding per attack [KEY LOGIC]
+    validation/logs.ts      MAX_LOG_BYTES (4 MB), response types
+    retention-rules.ts      retentionCutoffs, bearerMatches (pure + test); retention.ts runs the clean-up [KEY LOGIC]
+    demo/random.ts          seeded random (mulberry32), demo people / attacker countries / scanner paths
+    demo/world.ts           demoWorld(now): a made-up day, alerts from the real rules [KEY LOGIC]; request.ts caches it
+    demo/live.ts            one fake live event
+    public/feed.ts          publicFeed: what the public globe may see [KEY LOGIC]
+    geo/countries.ts, sphere.ts   country centres, servers (Singapore) + owner (India); lat/lon → 3D, arc height
+    landing/attacks.ts      nextAttack (live: weighted by real totals; simulated: fixed list), ARC_MS
   scripts/                  migrate, admin-create, admin-reset-2fa, throwaway-check, send-test-event, prompt,
                             simulate (per-site attack scenarios), connect (writes a site's local .env: --site)
-  e2e/                      Playwright, run in file order: 01-auth, 02-ingest, 03-live, 99-lockout (locks sign-in, so
-                            last); fixtures.ts (test values), helpers.ts (signInAsAdmin, sendSigned), global-setup.ts
-                            (resets guardrail_e2e, warms up pages)
+  e2e/                      Playwright, run in file order: 01-auth, 02-ingest, 03-live, 04-alerts, 05-charts, 06-upload,
+                            07-retention, 08-demo, 09-landing, 99-lockout (locks sign-in, so last); fixtures.ts (test
+                            values), helpers.ts (signInAsAdmin, sendSigned), global-setup.ts (resets guardrail_e2e,
+                            warms up every page and API route so dev-mode compiling never hits a 5 s wait)
+  public/samples/           access.log + auth.log samples for Log upload (documentation IPs only)
+  vercel.json               daily cron → /api/cron/retention (21:30 UTC = 03:00 IST)
   drizzle/                  SQL migrations (committed)
   proxy.ts                  per-request CSP with nonce (Next 16 "proxy" = old "middleware")
   next.config.ts            security headers, distDir switch for e2e, typedRoutes
@@ -162,6 +187,11 @@ Tokens live only in `app/globals.css` and are used through Tailwind names (`bg-p
 | --line | #1E2E4A (borders) | | --sev-medium | #F5B74E (amber) |
 | --text | #E6EDF7 | | --sev-low | #5EA3FF (blue) |
 | --muted | #8EA2C0 | | --ok | #4ADE80 |
+| --chart-homehaat | #2BA89A (chart series) | | --chart-oppora | #8B6CEF (chart series) |
+
+The two chart colours (Stage 6) passed the dataviz palette checks on `--panel` in dark mode (lightness band, chroma,
+colour-blind separation, contrast). Series colour follows the site, never its rank. Home page extras: `.glass`
+(frosted panel), `.float` (gentle drift), `.flip` / `.flip-inner` / `.flip-back` (card turn).
 
 Fonts: **Chakra Petch** (`font-display`: headings, big numbers), **IBM Plex Sans** (body), **IBM Plex Mono**
 (`font-mono`: IPs, times, IDs, codes, MITRE IDs, `.eyebrow` labels). Loaded with `next/font/google` (self-hosted).
@@ -174,15 +204,16 @@ loading (`loading.tsx`), empty (`EmptyState`) and error (`error.tsx`) states.
 
 | URL | What |
 |---|---|
-| `/` | public home: hero, "What it catches" (4 MITRE cards). Stage 6: 3D globe + demo |
+| `/` | public home: hero + 3D globe (attacks fly to Singapore, flash when blocked, high alerts hop to India; real country totals or labelled "Simulated"), six flip cards, How it works, Try the demo |
+| `/demo`, `/demo/events`, `/demo/alerts`, `/demo/alerts/[id]` | public, read-only, "Demo data." banner on every page; fake live feed; status/note controls replaced by a note |
 | `/signin` | step 1 email + password (show/hide), step 2 the 6-digit code; refresh keeps you on step 2 |
 | `/setup-2fa` | first sign-in only: QR + typed key + confirm code |
-| `/dashboard` | Overview: 4 StatCards (events 24 h, open alerts "—" until Stage 4, sources online n/2, failed sign-ins), Live events (latest 8, grows live), Sources (Online / Quiet / Not connected), Your account |
+| `/dashboard` | Overview: 4 StatCards, Events over time (24 IST hours, stacked by site, table view), Busiest IPs (24 h), Live events (latest 8), Open alerts, Sources, Your account |
 | `/dashboard/events` | filter bar (source, event type, search IP/account/path; a GET form → URL), live list (page 1 grows live; later pages show "N new events"), pagination 25/page |
 | `/dashboard/sources` | per site: secret set or not (never the value), last event, events 24 h, how it sends |
 | `/dashboard/alerts` | filters (status: open + acknowledged by default / open / acknowledged / resolved / all; severity; source) in the URL, list of alerts (severity, status, MITRE id, title, site, events, last seen), 20 per page, refreshes itself when events arrive |
 | `/dashboard/alerts/[id]` | incident: badges, title, rule description, What to do (advice + status buttons), Evidence (linked events), Details (MITRE link, subject, first/last seen), Timeline + Add a note |
-| `/dashboard/upload` | empty state (Stage 6) |
+| `/dashboard/upload` | Log upload: choose the site, a file (or drop one, or a sample), Analyse → what was read + one card per attack (severity, MITRE, events, first/last seen, line numbers) |
 
 The sidebar's Alerts link shows the open-alert count. Overview: "Open alerts" card (n high · n medium · n low) and an
 "Open alerts" panel. The Overview and incident page stack their columns below 1536px wide (2xl) so tables stay wide.
@@ -203,6 +234,9 @@ The sidebar's Alerts link shows the open-alert count. Overview: "Open alerts" ca
 | `POST /api/alerts/[id]/status` | `{status}` → `{status}`. 409 `not_allowed` (move not allowed) / `newer_open_alert` (reopen while a newer alert for the same attack is open), 404 |
 | `POST /api/alerts/[id]/notes` | `{note}` (1–2000 chars) → `{ok}` |
 | `GET /api/health` | `{ok: true}`, no database |
+| `POST /api/logs/analyze?source=` | signed in + Origin. Body = the file (text/plain, ≤ 4 MB) → `{lines, formats, unreadable, events, byType, firstAt, lastAt, findings}`. 413 `too_large`, 400 `compressed` (.gz) / `binary` / `empty` / `unknown_format` |
+| `GET /api/cron/retention` | `Authorization: Bearer <CRON_SECRET>` → `{ipsWiped, alertsWiped, sessionsDeleted, attemptsDeleted, noncesDeleted}`; 401 otherwise (always, when no secret is set) |
+| `GET /api/public/attacks` | public → `{mode: "live" \| "simulated", total, highAlerts, countries: [{code, lat, lon, attacks}]}`, `Cache-Control: public, max-age=60` |
 
 `/api/ingest` now answers `{accepted, duplicates, rejected}`: `duplicates` = events whose `uid` this site already
 sent (a retry), skipped. Every browser POST checks `Origin` (403 `bad_origin` otherwise). `/api/ingest` has no cookies and is checked by
@@ -289,6 +323,32 @@ kept through retries), `actor_id` (16–64 hex: the sender's keyed hash of the f
   deployable on its own); a shared pip package would be the next step if a third site ever joins.
 - **No MITRE rule for Oppora's forged callbacks or scheduler-secret guesses yet:** they're visible as events but
   no rule turns them into alerts (they have no account to group by). A possible later rule.
+- **Charts are hand-drawn SVG, not a chart library** (Stage 6): two small charts don't justify ~100 KB of Recharts;
+  our own SVG uses the tokens directly, needs nothing from elsewhere, and gets a keyboard tooltip + table view.
+- **Chart hours are India hours** (start at :00 IST). India is UTC+5:30 with no daylight saving, so a fixed offset is
+  exact. The chart's query starts where its first bar starts (found by a unit test: events from the partial hour 24 h
+  ago were being fetched and then not drawn).
+- **Uploaded logs are never stored** (not even a summary): analysed in memory, the answer is the only copy. Limit
+  4 MB because Vercel Hobby refuses request bodies over 4.5 MB. Classic auth.log lines have no year or time zone:
+  read as UTC, and a date that would be in the future is put in the previous year.
+- **sshd failures are counted once:** "Invalid user X" counts; the "Failed password for invalid user X" line that
+  follows it is skipped (otherwise each try would count twice).
+- **Retention:** raw IPs are wiped after 30 days (`ip_hash` stays, so counts and rules still work), and IP-based
+  alert titles become "… from a wiped IP". Expired sessions, sign-in tries older than a day and nonces older than
+  10 minutes are deleted. Runs daily from Vercel Cron with `CRON_SECRET` (the start script adds a random local one).
+  It's an app feature, not something run by hand: there's no npm script for it, so it can't be pointed at the real
+  database by mistake; the end-to-end test runs it only on `guardrail_e2e`.
+- **Demo = same views, generated data, no database.** `OverviewView` / `IncidentView` are shared; the demo pages
+  never import the database, so they can't show real data or change anything. A Playwright test records every
+  request while clicking through the demo and expects zero POSTs. Fixed seed, so alert links stay valid.
+- **Public globe data is aggregated:** only country totals of attack-type events (failed sign-ins, rate limits, scans,
+  forged webhooks, 403s) over 24 h, countries with < 3 hidden, cached 60 s (visitors don't each wake Neon). With no
+  real data it says "Simulated attacks" and makes them up. HomeHaat sends a country (Vercel header); Oppora doesn't.
+- **Three.js + @react-three/fiber, no drei** (Stage 6): the globe needs only spheres, lines and points. It's loaded
+  with `next/dynamic` (`ssr: false`) only when used; reduced motion or no WebGL → a still SVG globe and no download.
+  It pauses when scrolled away or the tab is hidden, uses `dpr` ≤ 1.75 and fewer attacks on phones. The globe has
+  no continents (no map data downloaded): a grid, a dot per country, the servers (Singapore, where both sites run
+  on Render) and the owner (India).
 - **The simulator fakes attacker IPs only through HomeHaat's own `PROXY_SECRET` header**, read from HomeHaat's local
   `.env` (never printed). Without it every request comes from 127.0.0.1. It signs in through Django's real CSRF flow
   and rate limits, so the events are exactly what a real attack would produce.
@@ -682,6 +742,86 @@ one at a time (it demonstrates detection, not the limiter).
 > simulator exposed a race condition in Oppora's rate limiter: parallel requests passed a 20-per-minute limit 70
 > times, because the throttle reads and writes its counter in two steps. The fix is an atomic Redis counter."
 
+### 20. Charts without a chart library — `components/charts/`, `lib/dashboard/buckets.ts`
+
+- **Events over time:** one SQL query groups by `date_trunc('hour', received_at AT TIME ZONE 'Asia/Kolkata')` and
+  site; `hourlyBuckets` (pure, tested) turns the rows into exactly 24 bars, filling empty hours with zero (a missing
+  hour would make the chart lie). `niceMax` rounds the axis top to 4, 8, 20, 40… so gridlines land on round numbers.
+- **Accessible by design:** colour + legend + tooltip + a "Show as a table" view; the chart is focusable and ← →
+  move between hours. Busiest IPs is a ranked list with the number always written next to the bar.
+- **Colours checked, not guessed:** the two series colours were run through a palette validator (colour-blind
+  separation, contrast on the dark panel) before use.
+
+> *Say it:* "I drew the charts in SVG myself rather than adding a library. The hourly data comes from one grouped
+> query, zero-filled by a pure tested function, in India time. They're keyboard-accessible with a table fallback, and
+> the colours were validated for colour-blind readers."
+
+### 21. Log upload — `lib/logs/parse.ts` + `lib/logs/analyze.ts` [KEY LOGIC]
+
+**What it does:** you upload an nginx/Apache access log or a Linux `auth.log`, and the SAME six rules run on it.
+1. `parseLine` reads one line with a regular expression per format. Access logs: IP, time (with its time zone),
+   request, status. 429 → `rate_limited`; a scanner path (`/.env`, `/wp-admin`… the same list HomeHaat uses) →
+   `suspicious_path`; a refused POST to a sign-in path → `login_failed`; anything else is an ordinary line.
+   auth.log: `Invalid user` / `Failed password` → `login_failed` with the account name, `Accepted` → `login_success`.
+   Query strings are cut (tokens), emails masked, IPs validated. Unknown lines are counted, never guessed.
+2. `analyzeEvents` sorts by time and, for each event and each rule that watches it, keeps a **sliding window** per
+   rule + key (account / IP), drops events older than the rule's window (and keeps at most 500), and calls the rule's
+   own `evaluate`. Findings with the same rule + key merge into **one finding per attack**, like alerts do.
+3. The route checks the session + Origin, the size (header and real body), refuses `.gz` (magic bytes 1F 8B) and
+   binary files, and returns the result. **Nothing is stored.**
+- Line numbers are the event ids, so each finding tells you where to look in the file. Two sample logs (documentation
+  IPs only) let anyone try it.
+
+> *Say it:* "Log upload parses nginx, Apache and sshd logs into the same event types the sites send, then replays them
+> through the same pure detection rules with a sliding window per key. It's all in memory: the file is never stored."
+
+### 22. Retention: IPs for 30 days — `lib/retention.ts` + `app/api/cron/retention/route.ts` [KEY LOGIC]
+
+- Daily at 03:00 IST Vercel Cron calls `/api/cron/retention`. Vercel adds `Authorization: Bearer <CRON_SECRET>`
+  itself; `bearerMatches` compares SHA-256 digests with `timingSafeEqual` (equal length, constant time). No secret
+  set = refuse everything.
+- `UPDATE event SET ip = NULL WHERE received_at < now − 30 days`: the **keyed hash stays**, so "busiest IPs" and the
+  per-IP rules still count correctly; only the readable address is gone. Alert titles about an IP lose it too.
+- Also deletes expired sessions, sign-in tries older than a day and old nonces. Each step is one indexed statement.
+
+> *Say it:* "Raw IPs are personal data, so a daily cron job nulls them after 30 days while keeping a keyed hash, which
+> keeps the statistics and detection working. The endpoint is protected by a bearer secret compared in constant time."
+
+### 23. A safe public demo — `lib/demo/world.ts` + `app/demo/` [KEY LOGIC]
+
+- **No database at all:** the demo pages import only the generator, so real data can't leak and nothing can be
+  written. The banner "Demo data." is in the layout, so no demo page can appear without it.
+- **Same UI:** the Overview and incident layouts became shared views with a `base` ("/dashboard" or "/demo"); the
+  parts that change things (status buttons, note form) are passed in, and the demo passes a read-only note.
+- **Realistic, not hand-written:** a seeded random generator makes a day of normal traffic plus six attacks, counted
+  back from "now"; the alerts come from running the REAL rules over those events (`analyzeEvents`). Older alerts are
+  resolved with notes, newer ones open. A fake live feed (`DemoLiveProvider`) plugs into the same context as the real
+  SSE feed, so live lists work unchanged.
+- **Tested:** deterministic, every rule fires, only documentation IPs and masked emails, Overview numbers add up;
+  and a browser test clicks through the demo while recording requests: zero POSTs.
+
+> *Say it:* "The demo reuses the real components but never touches the database: a seeded generator builds a day of
+> events and the real detection rules turn them into alerts. A test proves the demo makes no write requests."
+
+### 24. The 3D globe, privately and cheaply — `components/landing/`, `lib/public/feed.ts` [KEY LOGIC]
+
+- **Privacy first:** the public endpoint returns only `{code, lat, lon, attacks}` per country, for attack-type
+  events in the last 24 h, hiding countries with fewer than 3 (so one visitor's typo can't be read as "someone in X").
+  No IPs, accounts, paths or times; a test checks the response for anything that looks like an IP.
+- **Honest:** with no real data the panel says "Simulated attacks" and the attacks are made up.
+- **What you see:** attacks fly (Bézier arcs, lifted more for longer distances) from their country to the servers in
+  Singapore, a ring flashes there ("blocked"), and high alerts hop on in red to the owner in India. Glass panels count
+  what was blocked.
+- **Performance:** Three.js is downloaded only if it will be used (`next/dynamic`, no server rendering); one Three.js
+  layer animates every arc in `useFrame` without React re-renders and disposes finished objects; the scene stops when
+  off screen or in a hidden tab; fewer attacks and a capped pixel ratio on phones.
+- **Accessibility:** reduced motion or no WebGL → a still SVG globe; the globe has a text label; the flip cards are
+  real buttons with `aria-pressed`, so Enter/Space/tap turn them.
+
+> *Say it:* "The landing page globe is React Three Fiber, lazy-loaded and paused off screen, with a static SVG for
+> reduced motion. It's fed by a public endpoint that only exposes per-country totals with a minimum count, so it
+> shows real attack origins without revealing anything about individuals."
+
 ---
 
 ## Interview notes
@@ -749,6 +889,19 @@ one at a time (it demonstrates detection, not the limiter).
    see the old count: a check-then-act race. The fix is an atomic increment in Redis. I documented it as its own task
    instead of quietly changing a live site's limits.
 
+### Stage 6
+1. **How do you show attack data publicly without leaking anything?** The public endpoint only returns per-country
+   totals of attack events over 24 hours, hides countries with fewer than three events so no individual stands out,
+   and never includes IPs, accounts, paths or timestamps. It's cached for a minute, and when there's no real data
+   the page says the attacks are simulated.
+2. **How does the log upload reuse your detection?** Parsers turn access-log and sshd lines into the same event types
+   the sites send, then the events are replayed in time order through the same pure rule functions with a sliding
+   window per account or IP. Findings merge into one per attack. It runs in memory and stores nothing.
+3. **How do you keep a public demo safe?** The demo pages never import the database; they render the same view
+   components with data from a seeded generator, and the alerts come from running the real rules on that data. The
+   controls that change things are replaced, a banner is in the layout, and a browser test checks the demo sends no
+   write requests.
+
 ---
 
 ## Stage log
@@ -787,3 +940,11 @@ one at a time (it demonstrates detection, not the limiter).
   and flood raised medium alerts; forged callbacks (`state_mismatch`) and scheduler-secret guesses arrived as events.
   Found: Oppora's DRF throttles can be passed by parallel requests (70 of 75 through a 20/min limit). Fixed the same
   day in a separate session (Oppora b0cc62c, local): atomic counter, now 20 allowed / 55 blocked; 270 tests pass.
+- **Stage 6 (21 Oct 2026):** Overview charts (hand-drawn SVG: events per IST hour stacked by site, with keyboard
+  tooltip and table view; busiest IPs); log upload (nginx/Apache + auth.log parsers, same rules in memory, nothing
+  stored, sample logs); daily retention (IPs wiped after 30 days, hash kept; Vercel Cron + `CRON_SECRET`); public
+  read-only demo (shared views, seeded data, real rules, fake live feed, "Demo data." banner); 3D landing page (React
+  Three Fiber globe, lazy, still SVG for reduced motion, public country-only feed, flip cards). Shell/nav take a
+  `base`. Found by tests: the chart fetched events from a partial hour it never drew; the full e2e run needed every
+  page and API route warmed up (dev-mode compiling took over 5 s once the app grew). 146 unit tests, 35 Playwright
+  tests (passed twice in a row).

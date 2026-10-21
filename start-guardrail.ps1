@@ -63,7 +63,7 @@ if (-not (Test-Path $envFile)) {
 # Settings added in later stages: give any that are missing or empty a fresh random value.
 # (Keeps an older .env working without editing it by hand.)
 $lines = [System.Collections.Generic.List[string]](Get-Content $envFile)
-foreach ($name in "INGEST_SECRET_HOMEHAAT", "INGEST_SECRET_OPPORA") {
+foreach ($name in "INGEST_SECRET_HOMEHAAT", "INGEST_SECRET_OPPORA", "CRON_SECRET") {
     if ($lines | Where-Object { $_ -match "^$name=\S" }) { continue }
     $lines.RemoveAll([Predicate[string]] { param($l) $l -match "^$name=\s*$" }) | Out-Null
     $lines.Add("$name=$(RandomKey)")

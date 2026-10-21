@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { LiveProvider } from "@/components/live/LiveProvider";
-import { AppShell } from "@/components/shell/AppShell";
+import { AccountFooter, AppShell } from "@/components/shell/AppShell";
 import { activeAlertCounts } from "@/lib/alerts/query";
 import { requireActiveSession } from "@/lib/auth/guards";
 import { latestEventId } from "@/lib/events/query";
@@ -15,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const [cursor, alerts] = await Promise.all([latestEventId(), activeAlertCounts()]);
   return (
     <LiveProvider initialCursor={cursor}>
-      <AppShell email={user.email} openAlerts={alerts.total}>
+      <AppShell base="/dashboard" account={<AccountFooter email={user.email} />} openAlerts={alerts.total}>
         {children}
       </AppShell>
     </LiveProvider>

@@ -27,6 +27,8 @@ const schema = z.object({
   RESEND_API_KEY: optional(z.string().startsWith("re_", "must be a Resend API key (starts with re_)")),
   ALERT_EMAIL_TO: optional(z.email()),
   ALERT_EMAIL_FROM: optional(z.string().min(3)),
+  // The daily clean-up's secret (Vercel Cron sends it). Empty = the clean-up endpoint refuses every call.
+  CRON_SECRET: ingestSecret,
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 

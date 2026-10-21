@@ -15,6 +15,9 @@
   --sev-medium: #f5b74e;
   --sev-low: #5ea3ff;
   --ok: #4ade80;
+  /* Chart series (validated for colour-blind separation and contrast on --panel; dataviz validator) */
+  --chart-homehaat: #2ba89a;
+  --chart-oppora: #8b6cef;
   color-scheme: dark;
 }
 
@@ -31,6 +34,8 @@
   --color-sev-medium: var(--sev-medium);
   --color-sev-low: var(--sev-low);
   --color-ok: var(--ok);
+  --color-chart-homehaat: var(--chart-homehaat);
+  --color-chart-oppora: var(--chart-oppora);
   --font-display: var(--font-chakra), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "Cascadia Mono", monospace;
@@ -108,6 +113,50 @@ body {
   }
   to {
     background-color: transparent;
+  }
+}
+
+/* Home page: glass panels drift gently over the globe. */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.float {
+  animation: float 7s ease-in-out infinite;
+}
+.glass {
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  background: color-mix(in srgb, var(--panel) 62%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+/* Home page: "What it catches" cards turn over (hover, focus or tap) to show how each rule works. */
+.flip {
+  perspective: 1000px;
+}
+.flip-inner {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.flip-inner > * {
+  grid-area: 1 / 1; /* both faces in the same cell, so the card is as tall as the taller face */
+  backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+}
+.flip[aria-pressed="true"] .flip-inner {
+  transform: rotateY(180deg);
+}
+@media (hover: hover) {
+  .flip:hover .flip-inner {
+    transform: rotateY(180deg);
   }
 }
 

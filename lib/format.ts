@@ -19,3 +19,15 @@ export function formatTime(value: string | Date): string {
 export function formatCount(n: number): string {
   return new Intl.NumberFormat("en-IN").format(n);
 }
+
+const HOUR = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** "17:00" in India time (chart axis labels). */
+export function formatHour(value: string | Date): string {
+  return HOUR.format(typeof value === "string" ? new Date(value) : value);
+}
