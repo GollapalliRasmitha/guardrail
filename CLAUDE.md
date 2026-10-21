@@ -673,7 +673,9 @@ why: sending 75 sign-in requests **8 at a time**, **70** got through a limit of 
 20). Oppora uses DRF's `SimpleRateThrottle`, which reads the request history from Redis and writes it back in two
 separate steps; requests arriving together all read the same old history. That's a classic **race condition
 (check-then-act)**. The fix is an atomic counter (Redis `INCR` with an expiry, one step). It's recorded in Oppora's
-CLAUDE.md as a separate task; the simulator's Oppora flood now sends one at a time so it demonstrates detection.
+CLAUDE.md and **fixed in its own session** (Oppora commit b0cc62c, local): an atomic counter, so 75 parallel
+requests now give exactly 20 allowed / 55 blocked; 270 Oppora tests pass. The simulator's Oppora flood still sends
+one at a time (it demonstrates detection, not the limiter).
 
 > *Say it:* "Connecting the second site reused the same sender, adapted to Google sign-in: only tampered callbacks
 > count as failures, and the shared demo account is excluded to avoid false alerts. Testing it with my attack
@@ -783,4 +785,5 @@ CLAUDE.md as a separate task; the simulator's Oppora flood now sends one at a ti
   403), Celery Beat + scheduler resends; 14 new tests, Oppora 267 passing. GuardRail: `simulate --site oppora`
   (scan, flood, forged-callback, cron-guess), one `connect` script for both sites. By hand on a local Oppora: scan
   and flood raised medium alerts; forged callbacks (`state_mismatch`) and scheduler-secret guesses arrived as events.
-  Found: Oppora's DRF throttles can be passed by parallel requests (70 of 75 through a 20/min limit).
+  Found: Oppora's DRF throttles can be passed by parallel requests (70 of 75 through a 20/min limit). Fixed the same
+  day in a separate session (Oppora b0cc62c, local): atomic counter, now 20 allowed / 55 blocked; 270 tests pass.
