@@ -13,7 +13,7 @@ test("a correctly signed batch is accepted and stored, with privacy rules applie
     testEvent({ type: "suspicious_path", path: "/.env", method: "GET", status_code: 404 }),
   ]);
   expect(response.status()).toBe(202);
-  expect(await response.json()).toEqual({ accepted: 2, rejected: [] });
+  expect(await response.json()).toEqual({ accepted: 2, duplicates: 0, rejected: [] });
 
   const { rows } = await e2eDb.query(
     "SELECT actor, path, host(ip) AS ip, ip_hash FROM event WHERE host(ip) = '203.0.113.50'",
@@ -21,6 +21,16 @@ test("a correctly signed batch is accepted and stored, with privacy rules applie
   expect(rows[0].actor).toBe("pr****@gmail.com"); // full email never stored
   expect(rows[0].path).toBe("/reset/"); // the token in the query string never stored
   expect(rows[0].ip_hash).toMatch(/^[0-9a-f]{64}$/);
+});
+
+test("a retried event (same uid, new signature and nonce) is stored only once", async ({ request }) => {
+  const event = testEvent({ uid: "a".repeat(32), path: "/retry-test" });
+  const first = await sendSigned(request, [event]);
+  expect(await first.response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+  const retry = await sendSigned(request, [event, testEvent({ uid: "b".repeat(32) })]);
+  expect(await retry.response.json()).toEqual({ accepted: 1, duplicates: 1, rejected: [] });
+  const { rows } = await e2eDb.query("SELECT count(*)::int AS n FROM event WHERE uid = $1", ["a".repeat(32)]);
+  expect(rows[0].n).toBe(1);
 });
 
 test("bad events are reported one by one; good ones in the same batch are kept", async ({ request }) => {

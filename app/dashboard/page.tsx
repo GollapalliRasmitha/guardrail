@@ -1,13 +1,16 @@
 import { Activity, ArrowRight, Bell, KeyRound, Server, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AlertList } from "@/components/alerts/AlertList";
 import { LiveEventList } from "@/components/events/LiveEventList";
 import { SourceStatus } from "@/components/events/SourceStatus";
+import { RefreshOnEvents } from "@/components/live/RefreshOnEvents";
 import { PageHeader } from "@/components/shell/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Mono } from "@/components/ui/Mono";
 import { Panel } from "@/components/ui/Panel";
 import { StatCard } from "@/components/ui/StatCard";
+import { activeAlertCounts, latestActiveAlerts } from "@/lib/alerts/query";
 import { requireActiveSession } from "@/lib/auth/guards";
 import { overviewStats } from "@/lib/dashboard/overview";
 import { latestEvents } from "@/lib/events/query";
@@ -18,10 +21,16 @@ export const metadata: Metadata = { title: "Overview" };
 
 export default async function OverviewPage() {
   const { user, session } = await requireActiveSession();
-  const [stats, latest] = await Promise.all([overviewStats(user.id), latestEvents(8)]);
+  const [stats, latest, alertCounts, alerts] = await Promise.all([
+    overviewStats(user.id),
+    latestEvents(8),
+    activeAlertCounts(),
+    latestActiveAlerts(5),
+  ]);
 
   return (
     <>
+      <RefreshOnEvents />
       <PageHeader eyebrow="Control room" title="Overview" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -33,8 +42,13 @@ export default async function OverviewPage() {
         />
         <StatCard
           label="Open alerts"
-          value={null}
-          note="Detection rules arrive in Stage 4"
+          value={alertCounts.total}
+          note={
+            alertCounts.total === 0
+              ? "Nothing needs you right now"
+              : `${alertCounts.high} high · ${alertCounts.medium} medium · ${alertCounts.low} low`
+          }
+          tone={alertCounts.high > 0 ? "high" : "default"}
           icon={<Bell className="size-4" />}
         />
         <StatCard
@@ -52,8 +66,8 @@ export default async function OverviewPage() {
         />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="min-w-0 xl:col-span-2">
+      <div className="mt-6 grid gap-6 2xl:grid-cols-3">
+        <div className="min-w-0 2xl:col-span-2">
           <Panel
             title="Live events"
             action={
@@ -78,7 +92,25 @@ export default async function OverviewPage() {
           </Panel>
         </div>
 
-        <div className="space-y-6">
+        <div className="grid content-start gap-6 lg:grid-cols-2 2xl:grid-cols-1">
+          <Panel
+            title="Open alerts"
+            action={
+              <Link
+                href="/dashboard/alerts"
+                className="inline-flex items-center gap-1 text-sm text-accent hover:underline"
+              >
+                All alerts <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            }
+          >
+            {alerts.length > 0 ? (
+              <AlertList alerts={alerts} label="Latest open alerts" />
+            ) : (
+              <p className="text-sm text-muted">No open alerts. GuardRail is watching.</p>
+            )}
+          </Panel>
+
           <Panel title="Sources">
             <ul className="divide-y divide-line">
               {SOURCES.map((s) => (

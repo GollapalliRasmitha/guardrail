@@ -14,7 +14,7 @@ export default async function globalSetup() {
     const db = drizzle(pool);
     await migrate(db, { migrationsFolder: "./drizzle" });
     await pool.query(
-      "TRUNCATE event, ingest_nonce, auth_attempt, session, admin_user RESTART IDENTITY CASCADE",
+      "TRUNCATE alert_activity, alert_event, alert, event, ingest_nonce, auth_attempt, session, admin_user RESTART IDENTITY CASCADE",
     );
     await db
       .insert(adminUser)

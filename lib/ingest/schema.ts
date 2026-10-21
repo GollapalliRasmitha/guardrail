@@ -9,9 +9,19 @@ const metaValue = z.union([z.string().max(200), z.number().finite(), z.boolean()
 
 const eventSchema = z.object({
   type: z.enum(EVENT_TYPES),
+  // the sender's id for this event (idempotency key): a retry with the same uid is stored once
+  uid: z
+    .string()
+    .regex(/^[0-9a-f]{32}$/)
+    .optional(),
   occurred_at: z.iso.datetime({ offset: true }),
   ip: z.union([z.ipv4(), z.ipv6()]).optional(),
   actor: z.string().min(1).max(254).optional(),
+  // keyed hash of the full email, made by the sender: lets rules tell accounts apart without the email
+  actor_id: z
+    .string()
+    .regex(/^[0-9a-f]{16,64}$/)
+    .optional(),
   path: z.string().max(2048).optional(),
   method: z.string().max(10).optional(),
   status_code: z.number().int().min(100).max(599).optional(),
@@ -28,9 +38,11 @@ const batchSchema = z.object({ events: z.array(z.unknown()).min(1).max(MAX_EVENT
 /** One event, cleaned and ready for the database. */
 export type NewEvent = {
   type: EventType;
+  uid: string | null;
   occurredAt: Date;
   ip: string | null;
   actor: string | null;
+  actorId: string | null;
   path: string | null;
   method: string | null;
   statusCode: number | null;
@@ -93,9 +105,11 @@ export function parseBatch(body: unknown, now: Date): BatchResult {
     }
     accepted.push({
       type: e.type,
+      uid: e.uid ?? null,
       occurredAt,
       ip: e.ip ?? null,
       actor: e.actor ? maskActor(e.actor) : null,
+      actorId: e.actor_id ?? null,
       path: e.path ? cleanPath(e.path) : null,
       method: e.method ? e.method.toUpperCase() : null,
       statusCode: e.status_code ?? null,

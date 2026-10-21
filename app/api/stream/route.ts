@@ -37,7 +37,9 @@ export async function GET(request: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (text: string) => controller.enqueue(encoder.encode(text));
+      const send = (text: string) => {
+        if (!signal.aborted) controller.enqueue(encoder.encode(text)); // never write to a closed connection
+      };
       send("retry: 1000\n\n"); // reconnect 1 second after we close
       send(sseComment("connected"));
 

@@ -51,6 +51,8 @@ export async function insertEvents(source: SourceId, events: NewEvent[]): Promis
   const rows = await db()
     .insert(schema.event)
     .values(events.map((e) => ({ ...e, source, ipHash: e.ip ? privacyHash(e.ip) : null })))
+    // A uid this source already sent = a retry of something already stored: skip it, don't store it twice.
+    .onConflictDoNothing({ target: [schema.event.source, schema.event.uid] })
     .returning({ id: schema.event.id });
   return rows.map((r) => r.id);
 }

@@ -7,11 +7,13 @@ export function Pagination({
   page,
   pages,
   total,
+  noun = "events",
   hrefFor,
 }: {
   page: number;
   pages: number;
   total: number;
+  noun?: string;
   hrefFor: (page: number) => Route;
 }) {
   if (pages <= 1) return null;
@@ -31,7 +33,7 @@ export function Pagination({
         </span>
       )}
       <p className="font-mono text-xs text-muted">
-        Page {page} of {pages} · {total} events
+        Page {page} of {pages} · {total} {noun}
       </p>
       {page < pages ? (
         <Link href={hrefFor(page + 1)} className={link} rel="next">

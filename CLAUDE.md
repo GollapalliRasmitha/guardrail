@@ -5,8 +5,9 @@ HMAC-signed security events; GuardRail runs MITRE ATT&CK-mapped detection rules,
 live. Full brief and stage plan: `PROMPT.md`. Next.js 16 notes for agents: `AGENTS.md` (read the bundled docs in
 `node_modules/next/dist/docs/` before using a Next.js API; this version differs from older ones).
 
-**Current stage: 3 of 7 done — HomeHaat sends signed events (background, 2 s timeout, outbox + retry, off switch)
-and the localhost-only attack simulator. Next: Stage 4 (detection rules + alerts + email). Waiting for "continue".**
+**Current stage: 4 of 7 done — six MITRE-mapped detection rules, alerts (grouping, status, notes, incident
+timeline), optional email for high alerts, idempotent ingest (event uid). Next: Stage 5 (Oppora sends events).
+Waiting for "continue". HomeHaat's GuardRail commits stay LOCAL (not pushed) until Stage 7, as Rasmitha asked.**
 
 ---
 
@@ -87,7 +88,11 @@ guardrail/
     live/                   LiveProvider (ONE shared SSE connection + polling fallback + pause when hidden), LiveStatus
     events/                 EventList (table on md+, cards on phones), LiveEventList (grows live, keeps filters),
                             EventBadges (EventTypeBadge, SourceBadge), EventFilterBar (GET form), SourceStatus
-    ui/Pagination.tsx       Newer / Older links that keep the filters
+    ui/Pagination.tsx       Newer / Older links that keep the filters (noun: "events" / "alerts")
+    events/PathText.tsx     a path that wraps only after "/", long segments shortened, full path on click/tap/Enter
+    alerts/                 AlertList (links; one layout for phone + desktop), AlertFilterBar (GET form), StatusBadge,
+                            AlertActions (status buttons), NoteForm, Timeline (plain-words incident timeline)
+    live/RefreshOnEvents.tsx  re-renders server pages ~2.5 s after live events (alerts appear without reload)
   lib/
     env.ts                  every setting, validated with Zod (fails loudly, never prints values)
     db/schema.ts            Drizzle tables: admin_user, session, auth_attempt
@@ -116,6 +121,17 @@ guardrail/
     format.ts               formatTime (IST, same on server and browser), formatCount (Indian grouping)
     safety.ts               assertThrowaway()
     simulator/target.ts     assertLocalTarget (localhost only, URL-parsed) + testNetIp (documentation IPs) [KEY LOGIC]
+    events/path-parts.ts    pathParts: split a path after each "/", shorten very long segments (+ test)
+    detection/rules.ts      the six rules as pure functions + MITRE mapping + advice [KEY LOGIC]
+    detection/engine.ts     detect(eventIds): rules → findings → alerts; runs in after() [KEY LOGIC]
+    alerts/types.ts         SEVERITIES, ALERT_STATUSES, RULE_IDS, ACTIVITY_KINDS
+    alerts/store.ts         upsertAlert (one active alert per attack), changeStatus, addNote, timeline merge [KEY LOGIC]
+    alerts/status.ts        allowed status moves + button labels (+ test)
+    alerts/email.ts         emailDecision (high only, once, daily cap) + buildAlertEmail (no IPs) [KEY LOGIC]
+    alerts/notify.ts        sends via Resend's HTTP API, claims emailed_at first, outcome on the timeline
+    alerts/filters.ts, query.ts  alert list filters (URL) + listAlerts / alertDetail / activeAlertCounts
+    auth/api-guard.ts       guardChange(): Origin check + active session for dashboard API changes
+    validation/alerts.ts    statusBody, noteBody, alertId
   scripts/                  migrate, admin-create, admin-reset-2fa, throwaway-check, send-test-event, prompt,
                             simulate (attack scenarios), connect-homehaat (writes HomeHaat's local .env)
   e2e/                      Playwright, run in file order: 01-auth, 02-ingest, 03-live, 99-lockout (locks sign-in, so
@@ -159,7 +175,12 @@ loading (`loading.tsx`), empty (`EmptyState`) and error (`error.tsx`) states.
 | `/dashboard` | Overview: 4 StatCards (events 24 h, open alerts "—" until Stage 4, sources online n/2, failed sign-ins), Live events (latest 8, grows live), Sources (Online / Quiet / Not connected), Your account |
 | `/dashboard/events` | filter bar (source, event type, search IP/account/path; a GET form → URL), live list (page 1 grows live; later pages show "N new events"), pagination 25/page |
 | `/dashboard/sources` | per site: secret set or not (never the value), last event, events 24 h, how it sends |
-| `/dashboard/alerts`, `/upload` | empty states saying what comes (Stages 4, 6) |
+| `/dashboard/alerts` | filters (status: open + acknowledged by default / open / acknowledged / resolved / all; severity; source) in the URL, list of alerts (severity, status, MITRE id, title, site, events, last seen), 20 per page, refreshes itself when events arrive |
+| `/dashboard/alerts/[id]` | incident: badges, title, rule description, What to do (advice + status buttons), Evidence (linked events), Details (MITRE link, subject, first/last seen), Timeline + Add a note |
+| `/dashboard/upload` | empty state (Stage 6) |
+
+The sidebar's Alerts link shows the open-alert count. Overview: "Open alerts" card (n high · n medium · n low) and an
+"Open alerts" panel. The Overview and incident page stack their columns below 1536px wide (2xl) so tables stay wide.
 | `/dashboard/settings` | account, 2FA status, password/2FA commands, Sign out everywhere (with confirm) |
 
 ## API (all JSON; errors are `{ error: { code, message, retryAfterSec? } }`)
@@ -174,12 +195,16 @@ loading (`loading.tsx`), empty (`EmptyState`) and error (`error.tsx`) states.
 | `POST /api/ingest` | server-to-server. Headers `X-GuardRail-Source`, `-Timestamp` (unix s), `-Nonce` (32–128 hex), `-Signature` (hex HMAC-SHA256 of `v1:ts:nonce:body`). Body `{events: [1..50]}`. → 202 `{accepted, rejected: [{index, reason}]}`. 401 `unauthorized` (any auth failure, same message), 400 `invalid_json` / `invalid_batch`, 413 `too_large` (>64 KB), 429 (>600 req/min per source) |
 | `GET /api/stream` | SSE (signed in). `?after=<id>` or `Last-Event-ID`; messages `event: events` with `EventView[]`; closes after ~50 s |
 | `GET /api/events` | signed in. `?source&type&q&page` → `{events, total, page, pages}`; `?after=<id>` → `{events, cursor}` |
+| `POST /api/alerts/[id]/status` | `{status}` → `{status}`. 409 `not_allowed` (move not allowed) / `newer_open_alert` (reopen while a newer alert for the same attack is open), 404 |
+| `POST /api/alerts/[id]/notes` | `{note}` (1–2000 chars) → `{ok}` |
 | `GET /api/health` | `{ok: true}`, no database |
 
-Every browser POST checks `Origin` (403 `bad_origin` otherwise). `/api/ingest` has no cookies and is checked by
+`/api/ingest` now answers `{accepted, duplicates, rejected}`: `duplicates` = events whose `uid` this site already
+sent (a retry), skipped. Every browser POST checks `Origin` (403 `bad_origin` otherwise). `/api/ingest` has no cookies and is checked by
 its signature instead.
 
-**Event fields** (all optional except `type`, `occurred_at`): `ip` (v4/v6), `actor`, `path`, `method`,
+**Event fields** (all optional except `type`, `occurred_at`): `uid` (32 hex: the sender's id for the event,
+kept through retries), `actor_id` (16–64 hex: the sender's keyed hash of the full email), `ip` (v4/v6), `actor`, `path`, `method`,
 `status_code`, `user_agent`, `country` (2 letters), `meta` (only keys in `META_KEYS`). Types: `login_failed`,
 `login_success`, `admin_login`, `password_reset_requested`, `password_reset_done`, `rate_limited`,
 `webhook_signature_failed`, `payment_failed`, `refund_issued`, `suspicious_path`, `permission_denied`,
@@ -230,6 +255,21 @@ its signature instead.
 - **Scanner paths on the live site:** Vercel serves HomeHaat's pages and only `/api/*` reaches Django, so
   `suspicious_path` covers scans of the API and of the Render address directly. Scans of page URLs on Vercel aren't
   seen (a later improvement could report them from `frontend/proxy.ts`).
+- **Detection runs in Next.js `after()`**, once the ingest answer has been sent: the sender's 2-second timeout covers
+  storing events only, never rules or email.
+- **`actor_id`** (Stage 4): masked emails collide (`victim@` and `vivek@` are both `vi****@`), so per-account rules
+  use a keyed hash of the full email that the sender computes (HomeHaat: HMAC-SHA256 with `GUARDRAIL_SECRET`, first
+  32 hex). GuardRail never sees the email. Without it, rules fall back to the masked email (less precise).
+- **`uid` + unique (source, uid)** (Stage 4): found in a real test, when a slow first answer made HomeHaat retry a
+  batch GuardRail had already saved. Now retries can't duplicate (at-least-once sending + de-duplication).
+- **Titles never contain counts from a time window** (they could shrink later); the event total is shown separately.
+- **After an alert is resolved**, the engine ignores that group's events from before the resolve time, so one stray
+  event can't instantly re-raise the attack you just closed.
+- **Timeline merging:** "N more events" entries within 10 minutes are merged into one line.
+- **Email is optional** (`RESEND_API_KEY`, `ALERT_EMAIL_TO`, optional `ALERT_EMAIL_FROM`, default Resend's test sender
+  `onboarding@resend.dev`, which may only send to your own address). Not set → the timeline says so once per alert.
+- **Two HomeHaat Django processes on one database share one outbox.** Only matters in testing (my test Django on
+  8001 delivered events that Rasmitha's own Django on 8000 had queued); never an issue with one server per database.
 - **The simulator fakes attacker IPs only through HomeHaat's own `PROXY_SECRET` header**, read from HomeHaat's local
   `.env` (never printed). Without it every request comes from 127.0.0.1. It signs in through Django's real CSRF flow
   and rate limits, so the events are exactly what a real attack would produce.
@@ -519,6 +559,83 @@ scheduled job "guardrail" (hourly GitHub Actions → core/jobs.py) ─► flush_
 > *Say it:* "The simulator only attacks localhost. It checks that by parsing the URL rather than matching text, so
 > tricks like a user-name prefix or a look-alike domain are refused, and the tests try each one."
 
+### 15. The detection rules — `lib/detection/rules.ts` [KEY LOGIC]
+
+Each rule is a **pure function**: `evaluate(trigger, history)` gets the newest event and the earlier events with
+the same key, oldest first, and returns a finding (severity, title, subject, event ids) or `null`. No database, no
+clock, so each is unit-tested with small fixed lists (13 tests).
+
+| Rule | MITRE | Key (grouped by) | Window | Fires when | Severity |
+|---|---|---|---|---|---|
+| Brute force | T1110 | account | 10 min | ≥ 10 `login_failed` | High |
+| Credential stuffing | T1110.004 | IP | 10 min | failures on ≥ 5 different accounts | High |
+| Forged payment webhook | T1565 | site | 1 h | any `webhook_signature_failed` | High |
+| Scanning | T1595 | IP | 5 min | any `suspicious_path`; ≥ 5 | Low; Medium |
+| Request flood | T1499 | IP | 1 min | ≥ 50 `rate_limited` | Medium |
+| Sign-in from a new IP | T1078 | account | 30 days | a login from an IP not in that account's earlier logins (and it has some) | Medium; High for admin |
+
+- **"Account"** = `actor_id` (the sender's keyed hash of the email), so two people with the same masked email are never
+  mixed up; **"IP"** = the keyed IP hash, not the raw IP.
+- Each rule also carries its MITRE link, a plain description and "What to do" advice for the incident page.
+
+> *Say it:* "Each detection rule is a pure function over a window of events with the same key: account, IP or site.
+> That makes them trivially testable with fixed event lists, and each one maps to a MITRE ATT&CK technique."
+
+### 16. The engine, after the response — `lib/detection/engine.ts` [KEY LOGIC]
+
+1. `POST /api/ingest` stores the events and answers 202 **first**. Detection runs in Next.js **`after()`**, so the
+   sender's 2-second timeout never includes rules or email (on Vercel, `after` keeps the function alive to finish).
+2. For each new event and each rule that watches its type: work out the key and keep only the **newest event per
+   rule + key** (a batch of 50 failures for one account is one check, not 50).
+3. Load that key's history in the rule's window with one indexed query, starting at the later of "window start" and
+   "when I last resolved this attack".
+4. A finding becomes an alert (section 17), then maybe an email (section 18). Each check is isolated in try/catch.
+
+> *Say it:* "Detection runs after the response with Next's after(), so ingest stays fast. For each rule and key it
+> evaluates once with the newest event, using a single indexed query for the window."
+
+### 17. One alert per attack — `upsertAlert` in `lib/alerts/store.ts` [KEY LOGIC]
+
+**Problem:** a brute force sends events for minutes; I want **one** alert that grows, not one per batch. And two
+ingest requests may detect the same attack at the same moment.
+
+- Every finding has a **group key** = rule + key (`brute_force:actor:ab12…`).
+- Postgres has a **partial unique index**: `UNIQUE (group_key) WHERE status <> 'resolved'`. So there can be at most one
+  not-resolved alert per group, enforced by the database itself.
+- `INSERT … ON CONFLICT (group_key) WHERE status <> 'resolved' DO NOTHING RETURNING`: the first request creates the
+  alert; a racing second one gets nothing back, then `SELECT … FOR UPDATE` locks the winner's row and updates it.
+- Evidence: `alert_event` has primary key (alert, event), so linking is idempotent; `event_count` grows by the number
+  of *new* links. Severity only goes **up** (low → medium → high), with a timeline entry.
+- After "resolved", a new attack on the same key starts a **new** alert (the index ignores resolved ones).
+  Reopening an old one is refused if a newer one is open (409), so the rule "one active alert" always holds.
+- Status moves are a small table (`lib/alerts/status.ts`): open → acknowledged → resolved, resolved → open, checked
+  on the server again (the buttons are only a convenience).
+
+> *Say it:* "Alerts are deduplicated by a group key with a partial unique index, so only one active alert per attack
+> can exist even under concurrency. The insert uses ON CONFLICT DO NOTHING and the loser locks and updates the
+> winner's row in the same transaction."
+
+### 18. Exactly-once events and email — `uid` and `lib/alerts/notify.ts` [KEY LOGIC]
+
+**Exactly once (found by testing):** HomeHaat retries when GuardRail answers too slowly. If GuardRail had already
+saved the batch, the retry would duplicate it. Fix: HomeHaat gives each event a random **`uid`** when it's created and
+keeps it through every retry; GuardRail has `UNIQUE (source, uid)` and inserts with `ON CONFLICT DO NOTHING`, then
+answers `{accepted, duplicates}`. At-least-once sending + de-duplication = each event stored exactly once. (Two
+different senders' events with NULL uids never clash: Postgres treats NULLs as distinct.)
+
+**Email (high alerts only):**
+- `emailDecision` (pure, tested): only `high`; only once per alert (`emailed_at`); at most 20 a day (protects the
+  inbox and Resend's free 100/day); and "not configured" is an honest outcome, not an error.
+- **Claim before sending:** `UPDATE alert SET emailed_at = now() WHERE id = … AND emailed_at IS NULL RETURNING`. Only
+  one process can win, so two detections at once can't send two emails. If the send fails, the claim is given back.
+- **Privacy:** the email names the rule, MITRE id, site and event count, and links to the dashboard (sign-in + 2FA).
+  It never contains an IP or the alert's subject: email isn't a private place. A test checks the IP is absent.
+- Resend's HTTP API is called with `fetch` and a 5-second timeout (no SDK). Every outcome goes on the timeline.
+
+> *Say it:* "Events carry an idempotency key, so retries are safe: at-least-once delivery plus a unique constraint
+> gives exactly-once storage. High alerts send one email, claimed with a conditional update so concurrent detections
+> can't double-send, capped per day, and the email never contains IPs."
+
 ---
 
 ## Interview notes
@@ -561,6 +678,18 @@ scheduled job "guardrail" (hourly GitHub Actions → core/jobs.py) ─► flush_
    `localhost@evil.com` is refused), uses documentation-only IP ranges, and goes through HomeHaat's real CSRF checks
    and rate limits, so GuardRail sees exactly what a real attack would produce.
 
+### Stage 4
+1. **How do you avoid hundreds of alerts for one attack, even with concurrent requests?** Each finding gets a group
+   key (rule + account/IP/site), and a partial unique index allows only one not-resolved alert per key. The insert
+   uses ON CONFLICT DO NOTHING; whoever loses the race locks the existing row with SELECT FOR UPDATE and adds the new
+   evidence. Repeats grow one alert, and severity only goes up.
+2. **Your detection runs on serverless: how do you keep ingest fast?** The route stores the events and returns 202,
+   then runs the rules in Next.js after(), which keeps the function alive after the response. Each rule is a pure
+   function evaluated once per rule and key with one indexed history query.
+3. **What happens if the sender retries a batch you already saved?** Every event carries a uid made once by the sender
+   and kept through retries; a unique (source, uid) constraint with ON CONFLICT DO NOTHING stores it exactly once.
+   I found this case by testing: a slow first response made HomeHaat retry events GuardRail had already stored.
+
 ---
 
 ## Stage log
@@ -584,3 +713,11 @@ scheduled job "guardrail" (hourly GitHub Actions → core/jobs.py) ─► flush_
   visitor country via the proxy) with 30 new tests (HomeHaat 353 backend tests and 45 frontend tests all pass).
   In GuardRail, `simulate` (5 scenarios, localhost only) and `connect:homehaat`; 83 unit tests. One simulation
   delivered all 91 events; in a staged outage HomeHaat was unaffected and the 11 waiting events arrived afterwards.
+- **Fix (21 Oct 2026):** event paths wrap only after "/" (no more `/api/auth/signi` + `n/`); long segments shortened,
+  full path on click/tap/Enter.
+- **Stage 4 (21 Oct 2026):** migrations 0002 (alert, alert_event, alert_activity, event.actor_id) and 0003
+  (event.uid + unique per source); six rules + engine in `after()`; one-alert-per-attack upsert with a partial unique
+  index; status flow, notes, merged incident timeline; optional Resend email (high only, once, 20/day, no IPs);
+  Alerts list + incident page, Overview card/panel, sidebar badge, live refresh. HomeHaat (local commit only) sends
+  `actor_id` and `uid`. 111 unit tests, 25 Playwright tests. By hand: one simulation raised all five attack types
+  (brute force, stuffing, forged webhook = high; flood, scan = medium); acknowledge → note → resolve worked.

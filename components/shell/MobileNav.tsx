@@ -10,7 +10,7 @@ import { SignOutButton } from "./SignOutButton";
  * Phone menu. A native <dialog> opened with showModal() gives keyboard users the right behaviour for free:
  * focus moves inside, Tab stays inside, Escape closes it, and focus returns to the menu button afterwards.
  */
-export function MobileNav({ email }: { email: string }) {
+export function MobileNav({ email, openAlerts }: { email: string; openAlerts: number }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const close = () => dialog.current?.close();
 
@@ -44,7 +44,7 @@ export function MobileNav({ email }: { email: string }) {
             </button>
           </div>
           <nav aria-label="Main">
-            <NavLinks onNavigate={close} />
+            <NavLinks onNavigate={close} openAlerts={openAlerts} />
           </nav>
           <div className="mt-auto border-t border-line pt-3">
             <p className="truncate px-3 pb-2 font-mono text-xs text-muted">{email}</p>

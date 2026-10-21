@@ -13,6 +13,9 @@ const ingestSecret = z.preprocess(
   z.string().min(32, "must be at least 32 characters").optional(),
 );
 
+const optional = (inner: z.ZodType<string>) =>
+  z.preprocess((v) => (v === "" ? undefined : v), inner.optional());
+
 const schema = z.object({
   DATABASE_URL: z.url(),
   APP_URL: z.url(),
@@ -20,6 +23,10 @@ const schema = z.object({
   HASH_SECRET: base64Key,
   INGEST_SECRET_HOMEHAAT: ingestSecret,
   INGEST_SECRET_OPPORA: ingestSecret,
+  // Alert emails (optional). Without them, high alerts are still raised; the timeline says "email not set up".
+  RESEND_API_KEY: optional(z.string().startsWith("re_", "must be a Resend API key (starts with re_)")),
+  ALERT_EMAIL_TO: optional(z.email()),
+  ALERT_EMAIL_FROM: optional(z.string().min(3)),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 

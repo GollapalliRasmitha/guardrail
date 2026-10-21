@@ -4,7 +4,7 @@ A mini SIEM (security monitoring dashboard) for two live web apps, HomeHaat and 
 MITRE ATT&CK-mapped detection rules, alerts and a real-time dashboard. Built with Next.js 16, TypeScript, Postgres
 (Drizzle), Tailwind CSS, Vitest and Playwright.
 
-> Work in progress: Stages 1–2 of 7 are done (sign-in with 2FA, dashboard shell, signed event intake, live events). The full README, with
+> Work in progress: Stages 1–4 of 7 are done (sign-in with 2FA, signed event intake, live events, HomeHaat sending events, MITRE-mapped detection and alerts). The full README, with
 > screenshots, "Web development highlights" and "Security highlights", comes in Stage 7.
 
 ## Run it locally (Windows)

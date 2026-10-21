@@ -2,7 +2,7 @@ export type LiveState = "live" | "connecting" | "polling" | "paused" | "offline"
 
 const look: Record<LiveState, { label: string; dot: string }> = {
   live: { label: "Live", dot: "bg-accent animate-pulse" },
-  connecting: { label: "Reconnecting…", dot: "bg-sev-medium" },
+  connecting: { label: "Connecting…", dot: "bg-sev-medium" },
   polling: { label: "Live (polling)", dot: "bg-accent" },
   paused: { label: "Paused", dot: "bg-muted" },
   offline: { label: "Offline", dot: "bg-sev-high" },

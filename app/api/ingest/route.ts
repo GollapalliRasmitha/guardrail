@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { detect } from "@/lib/detection/engine";
 import { jsonError } from "@/lib/http/request";
 import { parseBatch } from "@/lib/ingest/schema";
 import { verifySignature } from "@/lib/ingest/signature";
@@ -14,7 +15,12 @@ import {
 
 const MAX_BODY_BYTES = 64 * 1024;
 
-export type IngestResponse = { accepted: number; rejected: { index: number; reason: string }[] };
+/** accepted = newly stored; duplicates = already had them (a retry); rejected = invalid, with the reason. */
+export type IngestResponse = {
+  accepted: number;
+  duplicates: number;
+  rejected: { index: number; reason: string }[];
+};
 
 /**
  * HomeHaat and Oppora send security events here, signed with their own secret (see lib/ingest/signature.ts).
@@ -64,11 +70,20 @@ export async function POST(request: Request) {
   const batch = parseBatch(body, new Date());
   if (!batch.ok) return jsonError(400, "invalid_batch", batch.reason);
 
-  await insertEvents(source, batch.accepted);
+  const ids = await insertEvents(source, batch.accepted);
+  // Detection (and maybe an alert email) runs AFTER the response is sent: the sender's 2-second timeout only
+  // covers storing the events, never the rules or the email.
+  after(async () => {
+    try {
+      await detect(ids);
+    } catch (error) {
+      console.error("Detection failed:", error instanceof Error ? error.message : error);
+    }
+  });
   if (Math.random() < 0.05) await pruneNonces(); // cheap housekeeping on ~1 in 20 requests
 
   return NextResponse.json<IngestResponse>(
-    { accepted: batch.accepted.length, rejected: batch.rejected },
+    { accepted: ids.length, duplicates: batch.accepted.length - ids.length, rejected: batch.rejected },
     { status: 202 },
   );
 }

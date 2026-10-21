@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isActive, NAV } from "./nav";
 
-export function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+export function NavLinks({ onNavigate, openAlerts = 0 }: { onNavigate?: () => void; openAlerts?: number }) {
   const pathname = usePathname();
   return (
     <ul className="space-y-1">
@@ -24,6 +24,12 @@ export function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
             >
               <Icon className="size-4.5 shrink-0" aria-hidden />
               {label}
+              {href === "/dashboard/alerts" && openAlerts > 0 && (
+                <span className="ml-auto rounded-full bg-sev-high/15 px-2 py-0.5 font-mono text-xs text-sev-high">
+                  {openAlerts}
+                  <span className="sr-only"> open</span>
+                </span>
+              )}
             </Link>
           </li>
         );

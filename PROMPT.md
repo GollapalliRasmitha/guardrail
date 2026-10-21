@@ -116,6 +116,8 @@ installs packages, runs migrations and opens the app on http://localhost:3100.
   30 days), `ip_hash` (kept for counting), `country` (2-letter), `actor` (masked email), `path`, `method`,
   `status_code`, `user_agent` (trimmed), `meta` (small JSONB, allow-listed keys only). Paths are stored without
   their query string (it can hold tokens).
+- `event.uid` + `event.actor_id` (Stage 4): the sender's id for each event (unique per source: retries are stored
+  once) and the sender's keyed hash of the full email (tells accounts apart without the email).
 - `alert` (Stage 4) — rule id, MITRE technique, severity, status (open / acknowledged / resolved), title, `group_key`
   (e.g. rule + IP, so repeats update one alert instead of creating 100), first/last seen, event count,
   `emailed_at`.

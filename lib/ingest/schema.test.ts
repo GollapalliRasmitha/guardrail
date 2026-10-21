@@ -51,6 +51,20 @@ describe("parseBatch", () => {
     expect(e.meta).toEqual({ reason: "wrong_password" });
   });
 
+  it("keeps the sender's account hash, and refuses one that isn't hex", () => {
+    const good = parseBatch({ events: [{ ...ok, actor_id: "a1b2c3d4e5f60718" }] }, now);
+    expect(good.ok && good.accepted[0]!.actorId).toBe("a1b2c3d4e5f60718");
+    const bad = parseBatch({ events: [{ ...ok, actor_id: "not-a-hash!" }] }, now);
+    expect(bad.ok && bad.rejected).toHaveLength(1);
+  });
+
+  it("keeps the sender's event uid (used to drop duplicates)", () => {
+    const r = parseBatch({ events: [{ ...ok, uid: "0123456789abcdef0123456789abcdef" }] }, now);
+    expect(r.ok && r.accepted[0]!.uid).toBe("0123456789abcdef0123456789abcdef");
+    const bad = parseBatch({ events: [{ ...ok, uid: "short" }] }, now);
+    expect(bad.ok && bad.rejected.map((x) => x.index)).toEqual([0]);
+  });
+
   it("accepts IPv6", () => {
     const r = parseBatch({ events: [{ ...ok, ip: "2001:db8::1" }] }, now);
     expect(r.ok && r.accepted[0]!.ip).toBe("2001:db8::1");
