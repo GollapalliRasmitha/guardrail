@@ -5,9 +5,10 @@ HMAC-signed security events; GuardRail runs MITRE ATT&CK-mapped detection rules,
 live. Full brief and stage plan: `PROMPT.md`. Next.js 16 notes for agents: `AGENTS.md` (read the bundled docs in
 `node_modules/next/dist/docs/` before using a Next.js API; this version differs from older ones).
 
-**Current stage: 4 of 7 done — six MITRE-mapped detection rules, alerts (grouping, status, notes, incident
-timeline), optional email for high alerts, idempotent ingest (event uid). Next: Stage 5 (Oppora sends events).
-Waiting for "continue". HomeHaat's GuardRail commits stay LOCAL (not pushed) until Stage 7, as Rasmitha asked.**
+**Current stage: 5 of 7 done — Oppora sends events too (same sender design as HomeHaat), the simulator attacks
+either site, `connect:oppora`. Next: Stage 6 (charts, log upload, demo mode, 3D landing page, more tests). Waiting
+for "continue". HomeHaat's and Oppora's GuardRail commits stay LOCAL (not pushed) until Stage 7: pushing either
+redeploys a live site (Rasmitha: "wait until Stage 7").**
 
 ---
 
@@ -50,12 +51,16 @@ npm run send-test-event        # signed test event(s) to the LOCAL app; options:
                                #   --count 5 --replay --bad-signature --stale  (refuses any non-localhost APP_URL)
 npm run connect:homehaat       # writes GUARDRAIL_* (+ a local PROXY_SECRET / RAZORPAY_WEBHOOK_SECRET if empty) into
                                #   ../homehaat/.env; values never printed; then restart HomeHaat
+npm run connect:oppora         # same for ../Oppora/.env (+ a local CRON_SECRET if empty); then restart Oppora
 npm run simulate               # attacks LOCAL HomeHaat (Django :8000): brute-force, stuffing, scan, flood, forged-webhook
                                #   --scenario <one> --target http://localhost:8000 (refuses anything not localhost)
+npm run simulate -- --site oppora   # attacks LOCAL Oppora: scan, flood, forged-callback, cron-guess
 ```
 
-**Local run with HomeHaat:** start GuardRail (3100) and HomeHaat (Django 8000), run `npm run connect:homehaat` once
-(and restart HomeHaat), then `npm run simulate`; the events appear live on /dashboard/events.
+**Local run:** start GuardRail (3100) and the site (Django 8000; HomeHaat and Oppora both use 8000, so one at a time,
+or start one on another port and pass `--target`), run `npm run connect:<site>` once (and restart the site), then
+`npm run simulate [-- --site oppora]`; the events appear live on /dashboard/events. Oppora's rate limits need its
+Redis running (`docker start oppora-redis-1`, or its start script); without it they let everything through.
 
 **Ports:** Postgres **5434** (HomeHaat 5433, Oppora 5432), app **3100**, end-to-end copy **3101**. All three
 projects can run at the same time.
@@ -133,7 +138,7 @@ guardrail/
     auth/api-guard.ts       guardChange(): Origin check + active session for dashboard API changes
     validation/alerts.ts    statusBody, noteBody, alertId
   scripts/                  migrate, admin-create, admin-reset-2fa, throwaway-check, send-test-event, prompt,
-                            simulate (attack scenarios), connect-homehaat (writes HomeHaat's local .env)
+                            simulate (per-site attack scenarios), connect (writes a site's local .env: --site)
   e2e/                      Playwright, run in file order: 01-auth, 02-ingest, 03-live, 99-lockout (locks sign-in, so
                             last); fixtures.ts (test values), helpers.ts (signInAsAdmin, sendSigned), global-setup.ts
                             (resets guardrail_e2e, warms up pages)
@@ -270,6 +275,20 @@ kept through retries), `actor_id` (16–64 hex: the sender's keyed hash of the f
   `onboarding@resend.dev`, which may only send to your own address). Not set → the timeline says so once per alert.
 - **Two HomeHaat Django processes on one database share one outbox.** Only matters in testing (my test Django on
   8001 delivered events that Rasmitha's own Django on 8000 had queued); never an issue with one server per database.
+- **Oppora's side (Stage 5) lives in the Oppora repo** (`backend/guardrail/`, local commit, not pushed): a copy of
+  HomeHaat's sender adapted to Oppora. Oppora signs in with Google only (no passwords, no Django admin, no
+  payments), so it sends `login_success`, `login_failed` (forged/invalid Google callbacks; never Cancel or timeout),
+  `rate_limited`, `suspicious_path` and `permission_denied` (wrong scheduler secret, 403s for signed-in users). The
+  shared **demo account is never reported** (recruiters from many IPs would raise false T1078 alerts). No country:
+  Oppora has no proxy secret to trust one with. Resends: Celery Beat every 10 min + the hourly scheduler run.
+- **The end-to-end copy blanks `RESEND_API_KEY` / `ALERT_EMAIL_TO` / `ALERT_EMAIL_FROM`** (playwright.config.ts and
+  .claude/launch.json): Next.js also reads `./.env`, and once Rasmitha added her Resend key a test run tried to email
+  her (Resend refused it with 403, so nothing was sent). An empty value counts as "already set", so `.env` can't
+  fill it in. Found 21 Oct 2026; tests must never use real keys.
+- **The copied sender is ~250 lines in two repos.** Kept as a copy on purpose (each site stays independent and
+  deployable on its own); a shared pip package would be the next step if a third site ever joins.
+- **No MITRE rule for Oppora's forged callbacks or scheduler-secret guesses yet:** they're visible as events but
+  no rule turns them into alerts (they have no account to group by). A possible later rule.
 - **The simulator fakes attacker IPs only through HomeHaat's own `PROXY_SECRET` header**, read from HomeHaat's local
   `.env` (never printed). Without it every request comes from 127.0.0.1. It signs in through Django's real CSRF flow
   and rate limits, so the events are exactly what a real attack would produce.
@@ -636,6 +655,31 @@ different senders' events with NULL uids never clash: Postgres treats NULLs as d
 > gives exactly-once storage. High alerts send one email, claimed with a conditional update so concurrent detections
 > can't double-send, capped per day, and the email never contains IPs."
 
+### 19. A second site, and what its attacks taught me — Oppora `backend/guardrail/` [KEY LOGIC]
+
+**Same design, different site.** Oppora got the same sender as HomeHaat (queue → background thread → signed batch
+→ 2 s timeout → outbox), its own secret (`INGEST_SECRET_OPPORA`), and hooks that fit how Oppora works:
+- Google sign-in has no password, so "failed login" means a **failed Google callback**: a forged or replayed
+  `state`, an invalid ID token, an unverified email. Pressing **Cancel** or taking too long is normal user behaviour
+  and is not reported (`HARMLESS_ERRORS`).
+- The **shared public demo** is never reported: every recruiter signs in to the same account from a different IP,
+  which would only raise false "sign-in from a new IP" alerts.
+- The visitor IP is taken **exactly as Oppora's own rate limiter sees it** (DRF `get_ident`), so both agree.
+- Its tests switch GuardRail off unless a test turns it on, so a developer's real `.env` can never make the test
+  suite send events.
+
+**A real weakness found by the simulator.** Oppora's flood test kept failing to raise an alert. Measuring it showed
+why: sending 75 sign-in requests **8 at a time**, **70** got through a limit of 20 a minute (one at a time: exactly
+20). Oppora uses DRF's `SimpleRateThrottle`, which reads the request history from Redis and writes it back in two
+separate steps; requests arriving together all read the same old history. That's a classic **race condition
+(check-then-act)**. The fix is an atomic counter (Redis `INCR` with an expiry, one step). It's recorded in Oppora's
+CLAUDE.md as a separate task; the simulator's Oppora flood now sends one at a time so it demonstrates detection.
+
+> *Say it:* "Connecting the second site reused the same sender, adapted to Google sign-in: only tampered callbacks
+> count as failures, and the shared demo account is excluded to avoid false alerts. Testing it with my attack
+> simulator exposed a race condition in Oppora's rate limiter: parallel requests passed a 20-per-minute limit 70
+> times, because the throttle reads and writes its counter in two steps. The fix is an atomic Redis counter."
+
 ---
 
 ## Interview notes
@@ -690,6 +734,19 @@ different senders' events with NULL uids never clash: Postgres treats NULLs as d
    and kept through retries; a unique (source, uid) constraint with ON CONFLICT DO NOTHING stores it exactly once.
    I found this case by testing: a slow first response made HomeHaat retry events GuardRail had already stored.
 
+### Stage 5
+1. **How did you add a second site without breaking or slowing it?** The same fire-and-forget sender (queue,
+   background thread, 2-second timeout, outbox with retries, off switch), its own signing secret, and hooks chosen
+   for how that site works. Its whole test suite still passes, and tests prove sign-in is unchanged when GuardRail is
+   down.
+2. **Why don't you report the demo account's sign-ins?** It's one shared account used by many visitors from many
+   IPs, so the "sign-in from a new IP" rule would fire constantly. Excluding it at the source keeps alerts meaningful.
+   It's a deliberate trade-off, written down.
+3. **Tell me about a bug your tools found.** My attack simulator showed Oppora's sign-in limit of 20 a minute let 70
+   of 75 parallel requests through. DRF's throttle reads and then writes its counter, so simultaneous requests all
+   see the old count: a check-then-act race. The fix is an atomic increment in Redis. I documented it as its own task
+   instead of quietly changing a live site's limits.
+
 ---
 
 ## Stage log
@@ -721,3 +778,9 @@ different senders' events with NULL uids never clash: Postgres treats NULLs as d
   Alerts list + incident page, Overview card/panel, sidebar badge, live refresh. HomeHaat (local commit only) sends
   `actor_id` and `uid`. 111 unit tests, 25 Playwright tests. By hand: one simulation raised all five attack types
   (brute force, stuffing, forged webhook = high; flood, scan = medium); acknowledge → note → resolve worked.
+- **Stage 5 (21 Oct 2026):** Oppora `backend/guardrail/` (local commit 94ee087, not pushed): sender, login signal
+  (demo excluded), failed Google callbacks, sign-in rate limits, middleware (scanner paths, 429, wrong cron secret,
+  403), Celery Beat + scheduler resends; 14 new tests, Oppora 267 passing. GuardRail: `simulate --site oppora`
+  (scan, flood, forged-callback, cron-guess), one `connect` script for both sites. By hand on a local Oppora: scan
+  and flood raised medium alerts; forged callbacks (`state_mismatch`) and scheduler-secret guesses arrived as events.
+  Found: Oppora's DRF throttles can be passed by parallel requests (70 of 75 through a 20/min limit).

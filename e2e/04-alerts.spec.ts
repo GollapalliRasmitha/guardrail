@@ -40,6 +40,19 @@ test("10 failed logins on one account raise a high brute-force alert", async ({ 
   );
   expect((await sendSigned(request, fails)).response.status()).toBe(202);
   const id = await waitForAlert(`brute_force:actor:${ACCOUNT}`);
+  // The email step runs just after the alert is saved: wait for its timeline entry before opening the page.
+  await expect
+    .poll(
+      async () =>
+        (
+          await e2eDb.query(
+            "SELECT count(*)::int AS n FROM alert_activity WHERE alert_id = $1 AND kind = 'email_skipped'",
+            [id],
+          )
+        ).rows[0].n,
+      { timeout: 10_000 },
+    )
+    .toBe(1);
 
   await page.goto("/dashboard/alerts");
   const row = page.getByRole("link", { name: /Brute force on vi\*\*\*\*@example\.com/ });

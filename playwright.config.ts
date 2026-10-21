@@ -27,6 +27,11 @@ export default defineConfig({
       DATABASE_URL: E2E_DATABASE_URL,
       APP_URL: E2E_URL,
       ...E2E_KEYS,
+      // Hermetic: Next.js also reads ./.env, so anything real there (like the alert email key) must be blanked here.
+      // An empty value counts as "already set", so .env can't fill it in; GuardRail then treats email as not set up.
+      RESEND_API_KEY: "",
+      ALERT_EMAIL_TO: "",
+      ALERT_EMAIL_FROM: "",
     },
   },
 });
