@@ -52,8 +52,15 @@ project and never uses HomeHaat's or Oppora's allowance.
    shares connections between them). **Copy the connection string.** It looks like
    `postgresql://neondb_owner:••••@ep-something-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`
    (note `-pooler` in the address).
-5. In Notepad, paste it right after `DATABASE_URL=` (no quotes, no spaces) and **save** the file.
-6. Tell Claude "Neon done". Claude runs `npm run live:migrate`, which creates GuardRail's tables in the new database
+5. In Notepad, paste it right after `DATABASE_URL=` in **`guardrail-secrets.env`** (no quotes, no spaces) and
+   **save** the file.
+   > **Not into `guardrail\.env`.** That file is your laptop's copy and already has a `DATABASE_URL` (the local
+   > Docker database). A second one at the end would win, and your laptop's GuardRail would quietly use the live
+   > database. (This happened once; Claude moved the line across without showing it.)
+6. Change `sslmode=require` at the end of the string to **`sslmode=verify-full`**. Both check Neon's certificate
+   today, but the database driver warns that `require` will mean less in its next version; `verify-full` keeps the
+   full check.
+7. Tell Claude "Neon done". Claude runs `npm run live:migrate`, which creates GuardRail's tables in the new database
    (it only creates; it never deletes) and prints `Database is up to date.`
 
 ---
