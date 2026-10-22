@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useLive } from "@/components/live/LiveProvider";
@@ -64,7 +65,7 @@ export function LiveEventList({
       </p>
       {waiting > 0 && (
         <Link
-          href={`/dashboard/events${filtersToQuery({ source, type, q })}`}
+          href={`/dashboard/events${filtersToQuery({ source, type, q })}` as Route}
           className="mb-4 flex min-h-11 items-center justify-center rounded-lg border border-accent/40 bg-accent/10 px-4 text-sm text-accent"
         >
           {waiting} new event{waiting === 1 ? "" : "s"} · go to the newest
