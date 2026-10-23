@@ -7,8 +7,8 @@ live. Full brief and stage plan: `PROMPT.md`. Next.js 16 notes for agents: `AGEN
 
 **Current stage: 7 of 7 — LIVE at https://guardrail-rasmitha.vercel.app (Vercel Hobby, Singapore; Neon project
 `guardrail`, Singapore). HomeHaat and Oppora send real events (their commits are pushed). Real visitor IPs fixed on
-both sites (23 Oct 2026). README with screenshots done; git history scanned (no secrets). Remaining: the final
-report. Secrets live only in `C:\Users\rasmi\guardrail-secrets.env` (outside every repo).**
+both sites (23 Oct 2026). README with screenshots done; git history scanned (no secrets). All 7 stages done (23 Oct
+2026). Open items: see "After Stage 7" at the end of the stage log. Secrets live only in `C:\Users\rasmi\guardrail-secrets.env` (outside every repo).**
 
 ---
 
@@ -999,3 +999,24 @@ one at a time (it demonstrates detection, not the limiter).
   `base`. Found by tests: the chart fetched events from a partial hour it never drew; the full e2e run needed every
   page and API route warmed up (dev-mode compiling took over 5 s once the app grew). 146 unit tests, 35 Playwright
   tests (passed twice in a row).
+- **Stage 7 (22–23 Oct 2026):** live at https://guardrail-rasmitha.vercel.app. Neon project `guardrail` (Singapore,
+  pooled, `verify-full`) with all migrations; Vercel Hobby in `sin1` with 9 settings and the daily retention cron;
+  the one account with 2FA. HomeHaat (`87f6405`) and Oppora (`b0cc62c`, incl. the atomic rate-limit fix) pushed after
+  their full suites passed; both send signed events (proved with `/.env` probes, a wrong sign-in and a forged Google
+  return; the Oppora demo account is not reported). Found live: every Oppora visitor looked like a Cloudflare address
+  (shared sign-in limit) and HomeHaat's direct requests looked like Render's relay. Measured the proxy chain with
+  fake documentation addresses and fixed both (HomeHaat `179db9a`: `TRUSTED_PROXY_HOPS=3`; Oppora `e406a49`: signed
+  `PROXY_SECRET` header + `NUM_PROXIES=3`), tests first (HomeHaat 359, Oppora 276 + 132 frontend), verified on all
+  five routes. README (screenshots from the live demo, animated-PNG globe, highlights, both bugs, Mermaid
+  architecture), `docs/deploy.md`, a history scan (no real value, no `.env`, only placeholders). Also: demo attackers
+  keep one country per IP, masking examples use `example.com`, a typed-route fix found by the first production
+  build. 147 unit tests, 35 Playwright tests.
+
+### After Stage 7 (open items, none blocking)
+
+- Resolve the 3 low "Scanning" alerts on Oppora (my IP-probe tests on 23 Oct) with a note.
+- Alert email is untested live (no high alert yet; a test run in Stage 4 got 403 from Resend, usually because
+  `ALERT_EMAIL_TO` isn't the Resend account's email). The first high alert's timeline will say "Email sent" or why not.
+- Repository visibility is Rasmitha's call: the history scan found no secrets; commits show her gmail as author.
+- Possible later improvements (from earlier stages): a rule for Oppora's forged Google callbacks / scheduler-secret
+  guesses; reporting scans of HomeHaat's page URLs from its Vercel `proxy.ts`.
