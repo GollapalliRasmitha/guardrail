@@ -5,10 +5,10 @@ HMAC-signed security events; GuardRail runs MITRE ATT&CK-mapped detection rules,
 live. Full brief and stage plan: `PROMPT.md`. Next.js 16 notes for agents: `AGENTS.md` (read the bundled docs in
 `node_modules/next/dist/docs/` before using a Next.js API; this version differs from older ones).
 
-**Current stage: 6 of 7 done — charts, log upload, 30-day IP wipe, public read-only demo, 3D landing page, 35
-end-to-end tests. Next: Stage 7 (deploy to Vercel + Neon, connect the live sites, README, screenshots). Waiting for
-"continue". HomeHaat's and Oppora's GuardRail commits stay LOCAL (not pushed) until Stage 7: pushing either
-redeploys a live site (Rasmitha: "wait until Stage 7").**
+**Current stage: 7 of 7 — LIVE at https://guardrail-rasmitha.vercel.app (Vercel Hobby, Singapore; Neon project
+`guardrail`, Singapore). HomeHaat and Oppora send real events (their commits are pushed). Real visitor IPs fixed on
+both sites (23 Oct 2026). README with screenshots done; git history scanned (no secrets). Remaining: the final
+report. Secrets live only in `C:\Users\rasmi\guardrail-secrets.env` (outside every repo).**
 
 ---
 
@@ -46,6 +46,9 @@ npm run check                  # lint + type-check + unit tests (Vitest)
 npm run test:e2e               # Playwright: starts its own copy on :3101 with the throwaway DB guardrail_e2e
 npm run db:generate            # after changing lib/db/schema.ts: writes a new SQL migration into drizzle/
 npm run db:migrate             # applies migrations to DATABASE_URL
+npm run live:migrate           # the same on the LIVE Neon database (reads ..\guardrail-secrets.env; only adds)
+npm run live:admin-create      # the live account / password change (typed in the terminal, hidden)
+npx tsx scripts/readme-screenshots.ts   # README images from the live home page + demo (made-up data only)
 npm run throwaway-check        # exits with an error unless DATABASE_URL is guardrail_e2e on localhost
 npm run send-test-event        # signed test event(s) to the LOCAL app; options: --source oppora --type suspicious_path
                                #   --count 5 --replay --bad-signature --stale  (refuses any non-localhost APP_URL)
@@ -172,6 +175,9 @@ guardrail/
   next.config.ts            security headers, distDir switch for e2e, typedRoutes
   docker-compose.yml        Postgres 17 on 127.0.0.1:5434; docker/initdb creates guardrail_e2e
   start-guardrail.ps1, "Start GuardRail.bat", .env.example, PROMPT.md, CLAUDE.md, AGENTS.md
+  README.md                 live links, screenshots, highlights, the two bugs, architecture (Mermaid)
+  docs/deploy.md            click-by-click: Neon, Vercel, account, connecting both sites, real visitor IPs
+  docs/screenshots/         README images (demo data only); globe.png is an animated PNG
 ```
 
 ## Design system ("security control room")
@@ -349,6 +355,21 @@ kept through retries), `actor_id` (16–64 hex: the sender's keyed hash of the f
   It pauses when scrolled away or the tab is hidden, uses `dpr` ≤ 1.75 and fewer attacks on phones. The globe has
   no continents (no map data downloaded): a grid, a dot per country, the servers (Singapore, where both sites run
   on Render) and the owner (India).
+- **Production (Stage 7):** Vercel project `guardrail` → https://guardrail-rasmitha.vercel.app (the second address
+  `guardrail-iota.vercel.app` redirects to it; sign-in only works on `APP_URL`). Functions in `sin1` (`vercel.json`),
+  Neon project `guardrail` in Singapore with the **pooled** connection string and `sslmode=verify-full` (pg warns that
+  `require` will mean less in its next major version). Production keys are fresh (not the laptop's) and live only in
+  `C:\Users\rasmi\guardrail-secrets.env` + Vercel; `live:*` scripts read that file with `tsx --env-file`.
+- **Lesson (Stage 7):** a Neon string pasted at the end of `guardrail/.env` silently overrides the local
+  `DATABASE_URL` (the last duplicate wins), so the laptop app would use the live database. It was moved before any
+  table existed; the guide now warns about it.
+- **Real visitor IPs on Render (measured 23 Oct 2026)** with fake documentation addresses in `X-Forwarded-For`:
+  straight to Render the list ends "visitor, Cloudflare, Render's relay" (visitor 3rd from the end, unfakeable because
+  Cloudflare appends the real address); through a website Vercel adds a step. Oppora's `NUM_PROXIES=2` made every
+  visitor a Cloudflare address (shared sign-in limit per Cloudflare edge); HomeHaat's direct requests were Render's
+  relay. Fixed: Oppora got HomeHaat's signed header (`PROXY_SECRET`) + `NUM_PROXIES=3`; HomeHaat got
+  `TRUSTED_PROXY_HOPS=3` for direct requests. Verified live: all five routes store the real IP, fakes ignored.
+- **Demo attackers keep one country per IP** (it was random per event); masking examples use `example.com`.
 - **The simulator fakes attacker IPs only through HomeHaat's own `PROXY_SECRET` header**, read from HomeHaat's local
   `.env` (never printed). Without it every request comes from 127.0.0.1. It signs in through Django's real CSRF flow
   and rate limits, so the events are exactly what a real attack would produce.
@@ -822,6 +843,23 @@ one at a time (it demonstrates detection, not the limiter).
 > reduced motion. It's fed by a public endpoint that only exposes per-country totals with a minimum count, so it
 > shows real attack origins without revealing anything about individuals."
 
+### 25. Going live, and finding the real visitor IP — `docs/deploy.md` [KEY LOGIC]
+
+- **Secrets never pass through chat or git:** a script generated fresh production keys into a private file outside
+  every repo; Vercel took them by pasting the file's block; Render got values copied by hand; checks print only
+  yes/no or lengths. A history scan (exact values + patterns) found nothing.
+- **Proving the live database without writing data:** a correctly signed request with an empty batch passes the
+  signature, the rate-limit read and the nonce write, then is refused as `invalid_batch`, so nothing is stored.
+- **Proxies decide who the visitor is.** Each proxy appends to `X-Forwarded-For`, and a visitor can write anything
+  at the front, so you count back from the end by the number of proxies you trust. The count was found by
+  measurement, not guessed: fake documentation addresses in the header showed where the real address sits. Where the
+  count differs by route (a website adds Vercel), a header signed with a shared secret is the robust answer.
+
+> *Say it:* "After deploying I noticed alerts showing a Cloudflare IP. I measured the proxy chain by sending fake
+> addresses in X-Forwarded-For and seeing which one each site stored, found the visitor sat one hop further back than
+> configured, and fixed it with a secret-signed header for website traffic and the right hop count for direct
+> traffic. It also fixed a real bug: visitors behind the same Cloudflare edge were sharing one rate limit."
+
 ---
 
 ## Interview notes
@@ -901,6 +939,19 @@ one at a time (it demonstrates detection, not the limiter).
    components with data from a seeded generator, and the alerts come from running the real rules on that data. The
    controls that change things are replaced, a banner is in the layout, and a browser test checks the demo sends no
    write requests.
+
+### Stage 7
+1. **How did you deploy without leaking secrets?** Fresh production keys were generated into a private file outside
+   every repository and pasted into Vercel's settings; the scripts that use them read the file directly and print
+   only yes/no checks. Before calling the repo public-safe I scanned its whole git history for the real values and for
+   secret-looking patterns.
+2. **How do you know which IP is the real client behind proxies?** Each proxy appends to X-Forwarded-For and the
+   client controls the front, so you count back from the end by the number of trusted proxies. I measured Render's
+   chain with fake addresses instead of guessing, and for website traffic, where the chain is longer, the site passes
+   the IP in a header signed with a shared secret.
+3. **What did going live teach you?** Production has layers local testing doesn't: Cloudflare in front of Render,
+   Vercel in front of that. A wrong hop count made every Oppora visitor share one rate limit. Watching real alerts
+   caught it within an hour of going live.
 
 ---
 

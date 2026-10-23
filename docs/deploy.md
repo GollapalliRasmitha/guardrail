@@ -134,13 +134,14 @@ Check it:
 First, Claude pushes HomeHaat's GuardRail commits to GitHub (only those: never your video changes or untracked files).
 Render then redeploys `homehaat-api` by itself.
 
-1. Render → **homehaat-api** → **Environment** → **Add Environment Variable**, three times:
+1. Render → **homehaat-api** → **Environment** → **Add Environment Variable**, four times:
 
    | Key | Value |
    |---|---|
    | `GUARDRAIL_ENABLED` | `true` |
-   | `GUARDRAIL_URL` | your GuardRail address, e.g. `https://guardrail.vercel.app` (no slash at the end) |
+   | `GUARDRAIL_URL` | `https://guardrail-rasmitha.vercel.app` (no slash at the end) |
    | `GUARDRAIL_SECRET` | the value of **`INGEST_SECRET_HOMEHAAT`** from the settings file |
+   | `TRUSTED_PROXY_HOPS` | `3` (requests that skip the website: see "Real visitor IPs" below) |
 
 2. **Save, rebuild, and deploy** (or **Save changes**, then **Manual Deploy → Deploy latest commit**).
 3. When it says **Live**, Claude sends one harmless request for `/.env` to the live API and checks it arrives in
@@ -148,18 +149,35 @@ Render then redeploys `homehaat-api` by itself.
 
 ---
 
-## Step 6. Connect Oppora (Render: Oppora's API service)
+## Step 6. Connect Oppora (Render: `oppora-api`, and Oppora's Vercel project)
 
-Same as step 5, with Oppora's values:
+Same as step 5, with Oppora's values. Oppora has one Render service (`oppora-api`; no separate worker on the free
+plan).
 
-| Key | Value |
-|---|---|
-| `GUARDRAIL_ENABLED` | `true` |
-| `GUARDRAIL_URL` | your GuardRail address |
-| `GUARDRAIL_SECRET` | the value of **`INGEST_SECRET_OPPORA`** from the settings file |
+| Where | Key | Value |
+|---|---|---|
+| Render `oppora-api` | `GUARDRAIL_ENABLED` | `true` |
+| Render `oppora-api` | `GUARDRAIL_URL` | `https://guardrail-rasmitha.vercel.app` |
+| Render `oppora-api` | `GUARDRAIL_SECRET` | the value of **`INGEST_SECRET_OPPORA`** from the settings file |
+| Render `oppora-api` | `NUM_PROXIES` | `3` |
+| Render `oppora-api` **and** Vercel (Oppora's project) | `PROXY_SECRET` | the value of **`OPPORA_PROXY_SECRET`** from the settings file (then **Redeploy** on Vercel) |
 
-If Oppora has a separate Celery worker / beat service on Render, it needs the same three values (it resends events
-that couldn't be delivered). Then Claude checks Oppora's sign-in and its demo.
+Then Claude checks Oppora's home page, demo and Google sign-in start, and that a probe arrives in GuardRail.
+
+### Real visitor IPs (found after going live, 23 Oct 2026)
+
+On Render every request passes through **Cloudflare** and **Render's own relay** before Django; from the websites
+it also passes through **Vercel**. Measured by sending fake documentation addresses in `X-Forwarded-For` and reading
+which address each site stored:
+
+- **Straight to Render** (scanners, scripts): the list ends "visitor, Cloudflare, Render's relay", so the visitor is
+  **3rd from the end**, and anything a visitor writes at the front is ignored (Cloudflare writes the real address
+  after it). HomeHaat: `TRUSTED_PROXY_HOPS=3`. Oppora: `NUM_PROXIES=3`.
+- **Through the website**, Vercel adds one more step, so each website passes the visitor's IP itself, with a shared
+  secret (`PROXY_SECRET` in both Vercel and Render); Django trusts that header only with the right secret.
+
+Before this, every Oppora visitor looked like a Cloudflare address (`172.69.…`), so visitors behind the same Cloudflare
+data centre shared one sign-in limit, and HomeHaat's direct requests all looked like Render's relay.
 
 ---
 
@@ -175,6 +193,8 @@ that couldn't be delivered). Then Claude checks Oppora's sign-in and its demo.
 | `CRON_SECRET` | ✓ | | | settings file (Vercel Cron sends it) |
 | `RESEND_API_KEY`, `ALERT_EMAIL_TO` | ✓ | | | Resend (copied from your laptop's `.env`) |
 | `GUARDRAIL_ENABLED` = `true` | | ✓ | ✓ | the off switch |
+| `OPPORA_PROXY_SECRET` | | | ✓ as `PROXY_SECRET` (and in Oppora's Vercel project) | settings file |
+| `TRUSTED_PROXY_HOPS` = `3` / `NUM_PROXIES` = `3` | | ✓ (`TRUSTED_PROXY_HOPS`) | ✓ (`NUM_PROXIES`) | measured, see above |
 
 All names are also in `.env.example` (without values).
 
