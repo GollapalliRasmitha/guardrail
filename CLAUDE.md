@@ -1014,7 +1014,7 @@ one at a time (it demonstrates detection, not the limiter).
 
 ### After Stage 7 (open items, none blocking)
 
-- Resolve the 3 low "Scanning" alerts on Oppora (my IP-probe tests on 23 Oct) with a note.
+- ~~Resolve the 3 low "Scanning" alerts on Oppora (IP-probe tests on 23 Oct)~~: done by Rasmitha.
 - Alert email is untested live (no high alert yet; a test run in Stage 4 got 403 from Resend, usually because
   `ALERT_EMAIL_TO` isn't the Resend account's email). The first high alert's timeline will say "Email sent" or why not.
 - Repository visibility is Rasmitha's call: the history scan found no secrets; commits show her gmail as author.
