@@ -14,8 +14,10 @@ test("a sample auth.log shows brute force, stuffing and a new-IP sign-in", async
   await expect(results.getByText("Credential stuffing from 198.51.100.66")).toBeVisible();
   await expect(results.getByText("Sign-in from a new IP for rasmi")).toBeVisible();
   await expect(page.getByRole("heading", { name: "auth.log (sample)" })).toBeFocused(); // keyboard users land here
-  if (process.env.SHOT_DIR)
+  if (process.env.SHOT_DIR) {
+    await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" }); // dev-mode badge
     await page.screenshot({ path: `${process.env.SHOT_DIR}/upload.png`, fullPage: true });
+  }
 });
 
 test("a chosen file is analysed; a .gz file is refused with a clear message", async ({ page }) => {

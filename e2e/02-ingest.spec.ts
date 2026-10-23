@@ -6,7 +6,7 @@ import { e2eDb, sendSigned, testEvent } from "./helpers";
 test("a correctly signed batch is accepted and stored, with privacy rules applied", async ({ request }) => {
   const { response } = await sendSigned(request, [
     testEvent({
-      actor: "Priya.Sharma@gmail.com",
+      actor: "Priya.Sharma@example.com",
       path: "/reset/?token=SECRET-RESET-TOKEN",
       ip: "203.0.113.50",
     }),
@@ -18,7 +18,7 @@ test("a correctly signed batch is accepted and stored, with privacy rules applie
   const { rows } = await e2eDb.query(
     "SELECT actor, path, host(ip) AS ip, ip_hash FROM event WHERE host(ip) = '203.0.113.50'",
   );
-  expect(rows[0].actor).toBe("pr****@gmail.com"); // full email never stored
+  expect(rows[0].actor).toBe("pr****@example.com"); // full email never stored
   expect(rows[0].path).toBe("/reset/"); // the token in the query string never stored
   expect(rows[0].ip_hash).toMatch(/^[0-9a-f]{64}$/);
 });

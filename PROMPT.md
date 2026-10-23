@@ -177,7 +177,7 @@ Dark, calm, precise. Deep navy ground, thin lines, one teal accent, colour used 
 - **Secrets** only in env vars, read through one typed, validated `lib/env.ts`. The TOTP secret is encrypted in the
   database with `ENCRYPTION_KEY` (AES-256-GCM).
 - **Privacy:** never store passwords, tokens, card data or webhook bodies; emails stored masked
-  (`ra****@gmail.com`); IPs kept 30 days then wiped (the hash stays for counting); the public landing page and demo
+  (`ra****@example.com`); IPs kept 30 days then wiped (the hash stays for counting); the public landing page and demo
   show **countries only, never IPs**.
 
 ---

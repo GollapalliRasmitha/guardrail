@@ -39,6 +39,15 @@ describe("demoWorld (fake data for the public demo)", () => {
     }
   });
 
+  it("gives each IP one country, like real data (an attacker doesn't hop countries between tries)", () => {
+    const countries = new Map<string, Set<string | null>>();
+    for (const e of world.events) {
+      if (!e.ip) continue;
+      countries.set(e.ip, (countries.get(e.ip) ?? new Set()).add(e.country));
+    }
+    expect([...countries.values()].every((set) => set.size === 1)).toBe(true);
+  });
+
   it("builds the Overview numbers from the same events", () => {
     const o = world.overview;
     expect(o.stats.events24h).toBe(world.events.length);

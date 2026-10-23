@@ -537,7 +537,7 @@ INSERT INTO ingest_nonce (source, nonce) VALUES (...) ON CONFLICT DO NOTHING RET
 - **A bad shape** (`{events: "x"}`, empty, >50) refuses the whole batch with 400. **A bad event inside a good batch**
   is reported by index in `rejected`, and the others are stored, so one broken event can't block the rest.
 - **Privacy, applied here even though the senders do it too** (defence in depth):
-  - `actor` masked: `priya.sharma@gmail.com` → `pr****@gmail.com`.
+  - `actor` masked: `priya.sharma@example.com` → `pr****@example.com`.
   - `path` stored **without the query string**: `/reset/?token=…` → `/reset/` (reset links carry tokens).
   - `meta` keeps only allow-listed keys (`reason`, `limit`, `role`…): a `password` key is silently dropped.
   - `user_agent` cut to 200 characters; the IP is also stored as a keyed hash (`ip_hash`) so counting still works

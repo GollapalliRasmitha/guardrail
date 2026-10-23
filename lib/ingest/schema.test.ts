@@ -6,11 +6,11 @@ const ok = { type: "login_failed", occurred_at: "2026-10-20T11:59:00Z" };
 
 describe("maskActor", () => {
   it("masks emails, keeping 2 letters and the domain", () => {
-    expect(maskActor("rasmitha@gmail.com")).toBe("ra****@gmail.com");
+    expect(maskActor("rasmitha@example.com")).toBe("ra****@example.com");
     expect(maskActor("Ab@x.io")).toBe("ab****@x.io");
   });
   it("leaves already-masked emails alone", () => {
-    expect(maskActor("ra****@gmail.com")).toBe("ra****@gmail.com");
+    expect(maskActor("ra****@example.com")).toBe("ra****@example.com");
   });
   it("masks other names too (usernames, phone numbers)", () => {
     expect(maskActor("9876543210")).toBe("98****");
@@ -26,7 +26,7 @@ describe("parseBatch", () => {
           {
             ...ok,
             ip: "203.0.113.9",
-            actor: "rasmitha@gmail.com",
+            actor: "rasmitha@example.com",
             path: "/api/auth/signin/?next=/orders&token=SECRET",
             method: "post",
             status_code: 401,
@@ -42,7 +42,7 @@ describe("parseBatch", () => {
     if (!result.ok) return;
     expect(result.rejected).toEqual([]);
     const e = result.accepted[0]!;
-    expect(e.actor).toBe("ra****@gmail.com"); // masked even if the sender forgot
+    expect(e.actor).toBe("ra****@example.com"); // masked even if the sender forgot
     expect(e.path).toBe("/api/auth/signin/"); // query string dropped: it can hold tokens
     expect(e.method).toBe("POST");
     expect(e.userAgent).toHaveLength(200);

@@ -56,7 +56,7 @@ export type BatchResult =
   | { ok: false; reason: string };
 
 /**
- * Privacy: never store a full email or username. "rasmitha@gmail.com" -> "ra****@gmail.com".
+ * Privacy: never store a full email or username. "rasmitha@example.com" -> "ra****@example.com".
  * Done here even though the senders mask too (defence in depth: one forgotten call can't leak data).
  */
 export function maskActor(actor: string): string {

@@ -21,8 +21,9 @@ type Draft = Omit<EventView, "id" | "occurredAt"> & { at: number };
 
 const ADMIN = { actor: "ad****@example.com", ip: "198.51.100.4", country: "IN" };
 
-function attacker(rand: Random, n: number) {
-  return { ip: `203.0.113.${n}`, country: rand.pick(ATTACKER_COUNTRIES) };
+/** Fake attacker n: a documentation IP and always the same country for it. */
+function attacker(n: number) {
+  return { ip: `203.0.113.${n}`, country: ATTACKER_COUNTRIES[n % ATTACKER_COUNTRIES.length]! };
 }
 
 function draft(source: SourceId, type: EventType, at: number, extra: Partial<Draft> = {}): Draft {
@@ -83,7 +84,7 @@ function background(rand: Random, now: number): Draft[] {
   for (const n of [31, 32, 33]) {
     out.push(
       draft(rand.pick(["homehaat", "oppora"] as const), "suspicious_path", when(), {
-        ...attacker(rand, n),
+        ...attacker(n),
         path: rand.pick(SCANNER_PATHS),
         method: "GET",
         statusCode: 404,
@@ -100,13 +101,13 @@ function attacks(rand: Random, now: number): Draft[] {
   for (let i = 0; i < 14; i++) {
     out.push(
       draft("homehaat", "login_failed", now - 3 * HOUR + i * 15_000, {
-        ...attacker(rand, 11 + (i % 3)),
+        ...attacker(11 + (i % 3)),
         actor: "pr****@example.com",
       }),
     );
   }
   // T1110.004 credential stuffing: one IP, nine accounts.
-  const stuffer = attacker(rand, 66);
+  const stuffer = attacker(66);
   ["ar", "me", "ka", "sa", "jo", "ni", "de", "an", "ro"].forEach((who, i) =>
     out.push(
       draft("homehaat", "login_failed", now - 7 * HOUR + i * 9_000, {
@@ -116,7 +117,7 @@ function attacks(rand: Random, now: number): Draft[] {
     ),
   );
   // T1595 scanning of Oppora.
-  const scanner = attacker(rand, 23);
+  const scanner = attacker(23);
   SCANNER_PATHS.forEach((path, i) =>
     out.push(
       draft("oppora", "suspicious_path", now - 40 * MIN + i * 3_000, {
@@ -128,11 +129,11 @@ function attacks(rand: Random, now: number): Draft[] {
     ),
   );
   // T1499 request flood on Oppora's sign-in.
-  const flooder = attacker(rand, 99);
+  const flooder = attacker(99);
   for (let i = 0; i < 60; i++)
     out.push(draft("oppora", "rate_limited", now - 5 * HOUR + i * 800, { ...flooder }));
   // T1565 forged payment webhooks at HomeHaat.
-  const forger = attacker(rand, 140);
+  const forger = attacker(140);
   for (let i = 0; i < 2; i++) {
     out.push(
       draft("homehaat", "webhook_signature_failed", now - 10 * HOUR + i * 60_000, {
@@ -146,7 +147,7 @@ function attacks(rand: Random, now: number): Draft[] {
   out.push(
     draft("homehaat", "admin_login", now - 2 * HOUR, {
       ...ADMIN,
-      ...attacker(rand, 201),
+      ...attacker(201),
       path: "/admin/login/",
     }),
   );

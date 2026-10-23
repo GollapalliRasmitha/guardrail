@@ -86,7 +86,7 @@ export const event = pgTable(
     ip: inet("ip"), // wiped after 30 days (Stage 6); ip_hash stays for counting
     ipHash: text("ip_hash"),
     country: text("country"), // 2 letters, e.g. "IN"
-    actor: text("actor"), // masked: "ra****@gmail.com"
+    actor: text("actor"), // masked: "ra****@example.com"
     // A keyed hash of the full email, computed by the sender: tells accounts apart (vi****@ could be victim@ or
     // vivek@) without anyone here learning the email. Used by the per-account detection rules.
     actorId: text("actor_id"),
