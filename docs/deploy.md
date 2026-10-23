@@ -85,7 +85,7 @@ Reads the settings file, connects to Neon over TLS and applies the migrations in
    - **Framework Preset:** Next.js (detected by itself). **Root Directory:** leave as it is (`./`).
    - Open **Environment Variables**. In Notepad, select every line from `DATABASE_URL=` down to the last line
      (`ALERT_EMAIL_TO=…`) and copy. Click into the first **Key** box in Vercel and **paste**: Vercel splits the
-     lines into separate variables by itself. Check you see 10 rows: `DATABASE_URL`, `APP_URL`, `ENCRYPTION_KEY`,
+     lines into separate variables by itself. Check you see 9 rows: `DATABASE_URL`, `APP_URL`, `ENCRYPTION_KEY`,
      `HASH_SECRET`, `INGEST_SECRET_HOMEHAAT`, `INGEST_SECRET_OPPORA`, `CRON_SECRET`, `RESEND_API_KEY`,
      `ALERT_EMAIL_TO` (comment lines are ignored).
 4. Click **Deploy**. After 2–3 minutes you get your address, for example `https://guardrail.vercel.app` or
@@ -95,6 +95,11 @@ Reads the settings file, connects to Neon over TLS and applies the migrations in
    - Vercel → the project → **Settings → Environment Variables** → `APP_URL` → **Edit** → the same value → **Save**;
    - **Deployments** → the newest → **⋯** → **Redeploy**.
    Until `APP_URL` matches, signing in says "This request didn't come from GuardRail" (that's the CSRF check).
+
+   GuardRail's address is **`https://guardrail-rasmitha.vercel.app`**. Vercel also gave it a second address
+   (`guardrail-iota.vercel.app`); pages work there, but signing in only works on the address in `APP_URL`. To send
+   everyone to the right one: **Settings → Domains** → `guardrail-iota.vercel.app` → **Edit** → **Redirect to**
+   `guardrail-rasmitha.vercel.app` → **Save**.
 
 Things already set by the code, nothing to click:
 - **Region:** `vercel.json` says `"regions": ["sin1"]` (Singapore). Check: **Settings → Functions** shows Singapore.
