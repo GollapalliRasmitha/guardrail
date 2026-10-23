@@ -1,0 +1,281 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GuardRail explainer</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Instrument+Serif:ital@1&display=block" rel="stylesheet">
+<style>body{margin:0;background:#070D1A}canvas{width:960px;height:540px}</style>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script src="mp4.js"></script>
+<script>
+// GuardRail explainer: the same structure, timing and music as HomeHaat's and Oppora's explainers (glowing background,
+// eyebrow + headline with one accent, cards that appear one by one, counters, end card), in GuardRail's control-room
+// look (navy, teal, red; Chakra Petch + IBM Plex). Every fact comes from the README / CLAUDE.md.
+const W = 1920, H = 1080, FPS = 30, T = 60;
+const c = document.getElementById("c"), g = c.getContext("2d");
+const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 3));
+const appear = (lt, at, d = 0.6) => ease((lt - at) / d);
+const WHITE = "#E6EDF7", MUTE = "rgba(230,237,247,0.66)", FAINT = "rgba(230,237,247,0.42)";
+const ACC1 = "#6FD3C5", ACC2 = "#5EA3FF"; // teal -> blue (GuardRail's accent)
+const HIGH = "#FF6B6B", MED = "#F5B74E", LOW = "#5EA3FF", INK = "#052520";
+const BODY = "IBM Plex Sans", HEAD = "Chakra Petch", MONO = "IBM Plex Mono";
+let globe;
+
+// ---------- background: navy control room with drifting teal / blue / red glows and a faint grid ----------
+function bg(t) {
+  g.fillStyle = "#070D1A"; g.fillRect(0, 0, W, H);
+  const blobs = [
+    [0.2 + 0.05 * Math.sin(t * 0.21), 0.2 + 0.04 * Math.cos(t * 0.17), 760, "rgba(64,170,156,0.32)"],
+    [0.82 + 0.04 * Math.cos(t * 0.19), 0.72 + 0.05 * Math.sin(t * 0.23), 820, "rgba(70,120,230,0.30)"],
+    [0.55 + 0.06 * Math.sin(t * 0.13 + 1), 0.98 + 0.03 * Math.cos(t * 0.29), 600, "rgba(200,70,80,0.20)"],
+  ];
+  for (const [x, y, r, col] of blobs) {
+    const gr = g.createRadialGradient(x * W, y * H, 0, x * W, y * H, r);
+    gr.addColorStop(0, col); gr.addColorStop(1, "rgba(7,13,26,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  }
+  g.save(); g.strokeStyle = "rgba(111,211,197,0.045)"; g.lineWidth = 1;
+  for (let x = 0; x <= W; x += 80) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  for (let y = 0; y <= H; y += 80) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+  g.restore();
+}
+function rr(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function card(x, y, w, h, a, r = 18) {
+  g.save(); g.globalAlpha = a; rr(x, y, w, h, r);
+  g.fillStyle = "rgba(13,22,40,0.82)"; g.fill(); g.strokeStyle = "rgba(111,211,197,0.18)"; g.lineWidth = 1.5; g.stroke(); g.restore();
+}
+function text(s, x, y, { size = 24, weight = 500, color = WHITE, align = "left", font = BODY, italic = false, alpha = 1, spacing = 0 } = {}) {
+  g.save(); g.globalAlpha *= alpha; g.font = `${italic ? "italic " : ""}${weight} ${size}px '${font}'`; g.letterSpacing = spacing + "px";
+  g.fillStyle = color; g.textAlign = align; g.textBaseline = "alphabetic"; g.fillText(s, x, y); const w = g.measureText(s).width; g.restore(); return w;
+}
+function accentFill(x0, x1) { const gr = g.createLinearGradient(x0, 0, x1, 0); gr.addColorStop(0, ACC1); gr.addColorStop(1, ACC2); return gr; }
+/** Eyebrow + headline "before ACCENT after", centred at y. */
+function title(lt, eyebrow, before, accent, after, y = 210, out = 1) {
+  const a = appear(lt, 0, 0.8) * out;
+  text(eyebrow.toUpperCase(), W / 2, y - 62, { size: 18, weight: 600, color: ACC1, align: "center", alpha: a, spacing: 5, font: MONO });
+  g.save(); g.globalAlpha = a;
+  const size = 66, dy = (1 - appear(lt, 0, 0.8)) * 16;
+  g.font = `700 ${size}px '${HEAD}'`; g.letterSpacing = "-0.5px";
+  const wb = g.measureText(before).width, wa_ = (g.font = `italic 400 ${size * 1.14}px 'Instrument Serif'`, g.letterSpacing = "0px", g.measureText(accent).width);
+  g.font = `700 ${size}px '${HEAD}'`; g.letterSpacing = "-0.5px";
+  const wf = g.measureText(after).width, x0 = W / 2 - (wb + wa_ + wf) / 2;
+  g.fillStyle = WHITE; g.fillText(before, x0, y + dy);
+  g.font = `italic 400 ${size * 1.14}px 'Instrument Serif'`; g.letterSpacing = "0px"; g.fillStyle = accentFill(x0 + wb, x0 + wb + wa_); g.fillText(accent, x0 + wb, y + dy);
+  g.font = `700 ${size}px '${HEAD}'`; g.letterSpacing = "-0.5px"; g.fillStyle = WHITE; g.fillText(after, x0 + wb + wa_, y + dy);
+  g.restore();
+}
+/** The GuardRail mark: a shield, then "Guard" + teal "Rail". */
+function logo(cx, cy, size, a) {
+  g.save(); g.globalAlpha = a;
+  g.font = `700 ${size}px '${HEAD}'`;
+  const wG = g.measureText("Guard").width, wR = g.measureText("Rail").width, sh = size * 1.1, gap = size * 0.3;
+  const x0 = cx - (sh * 0.86 + gap + wG + wR) / 2, top = cy - size * 0.86;
+  g.beginPath(); // shield
+  g.moveTo(x0 + sh * 0.43, top); g.lineTo(x0 + sh * 0.86, top + sh * 0.18); g.lineTo(x0 + sh * 0.86, top + sh * 0.52);
+  g.quadraticCurveTo(x0 + sh * 0.84, top + sh * 0.86, x0 + sh * 0.43, top + sh); g.quadraticCurveTo(x0 + sh * 0.02, top + sh * 0.86, x0, top + sh * 0.52);
+  g.lineTo(x0, top + sh * 0.18); g.closePath(); g.lineWidth = size * 0.07; g.strokeStyle = ACC1; g.stroke();
+  g.beginPath(); g.moveTo(x0 + sh * 0.25, top + sh * 0.5); g.lineTo(x0 + sh * 0.61, top + sh * 0.5); g.stroke();
+  g.beginPath(); g.arc(x0 + sh * 0.43, top + sh * 0.5, size * 0.07, 0, 7); g.fillStyle = ACC1; g.fill();
+  const tx = x0 + sh * 0.86 + gap;
+  g.fillStyle = WHITE; g.fillText("Guard", tx, cy); g.fillStyle = ACC1; g.fillText("Rail", tx + wG, cy);
+  g.restore();
+}
+function chip(x, y, label, col, a, ink = INK) {
+  g.save(); g.globalAlpha = a; g.font = `600 16px '${MONO}'`; const w = g.measureText(label).width + 26;
+  rr(x, y - 22, w, 32, 16); g.fillStyle = col; g.fill(); g.fillStyle = ink; g.fillText(label, x + 13, y); g.restore(); return w;
+}
+const count = (lt, at, to, d = 1.4) => Math.round(to * ease((lt - at) / d));
+
+// ---------- scenes (start, end) ----------
+const scenes = [
+  [0, 5.5, (lt, o) => {
+    logo(W / 2, 560, 120, appear(lt, 0.2, 0.9) * o);
+    text("A security control room for two live websites", W / 2, 670, { size: 30, color: MUTE, align: "center", alpha: appear(lt, 1.3, 0.8) * o });
+  }],
+  [5.5, 12.5, (lt, o) => {
+    title(lt, "The problem", "Live sites get ", "attacked", " all day", 210, o);
+    const rows = [
+      ["GET /.env  /wp-admin/", "Bots scanning for secret files", MED],
+      ["12 wrong passwords", "Someone guessing one account", HIGH],
+      ["1 IP, 8 accounts", "A leaked password list being tried", HIGH],
+      ["“payment captured”", "A forged payment webhook", HIGH],
+      ["62 sign-ins in seconds", "A flood to overload the site", MED],
+    ];
+    rows.forEach(([who, what, col], i) => {
+      const a = appear(lt, 0.9 + i * 0.55) * o, y = 330 + i * 92, dx = (1 - a) * -24;
+      card(500 + dx, y, 920, 72, a, 14);
+      g.save(); g.globalAlpha = a; g.beginPath(); g.arc(532 + dx, y + 36, 7, 0, 7); g.fillStyle = col; g.fill(); g.restore();
+      text(who, 558 + dx, y + 45, { size: 23, weight: 600, alpha: a, font: MONO });
+      text(what, 900 + dx, y + 45, { size: 23, color: MUTE, alpha: a });
+    });
+  }],
+  [12.5, 21.5, (lt, o) => {
+    title(lt, "How it works", "Signed events, ", "live detection", "", 210, o);
+    const steps = [["Sites send", "HomeHaat and Oppora sign every batch of security events (HMAC-SHA256)."],
+      ["Verify", "Wrong signature, old timestamp or replayed request: refused."],
+      ["Detect", "Six rules mapped to MITRE ATT&CK run after each batch."],
+      ["Alert", "One alert per attack, live on the dashboard; high ones emailed."]];
+    steps.forEach(([h, d], i) => {
+      const a = appear(lt, 1.0 + i * 1.0) * o, x = 260 + i * 360, y = 360 + (1 - a) * 24;
+      card(x, y, 330, 300, a);
+      g.save(); g.globalAlpha = a; rr(x + 30, y + 30, 46, 46, 12); g.fillStyle = accentFill(x + 30, x + 76); g.fill(); g.restore();
+      text(String(i + 1), x + 53, y + 63, { size: 24, weight: 700, color: INK, align: "center", alpha: a, font: HEAD });
+      text(h, x + 30, y + 130, { size: 32, weight: 700, alpha: a, font: HEAD });
+      wrap(d, x + 30, y + 178, 270, 34, { size: 22, color: MUTE, alpha: a });
+    });
+  }],
+  [21.5, 30.5, (lt, o) => {
+    title(lt, "Detection", "Six rules, mapped to ", "MITRE ATT&CK", "", 200, o);
+    const rules = [["T1110", "Brute force", "10+ wrong passwords on one account", "High", HIGH],
+      ["T1110.004", "Credential stuffing", "one IP fails on 5+ accounts", "High", HIGH],
+      ["T1565", "Forged payment webhook", "a payment notice with a wrong signature", "High", HIGH],
+      ["T1595", "Scanning", "requests for /.env, /wp-admin…", "Low → Medium", MED],
+      ["T1499", "Request flood", "50 rate-limit hits in a minute", "Medium", MED],
+      ["T1078", "Sign-in from a new IP", "an IP the account hasn’t used in 30 days", "Medium", MED]];
+    rules.forEach(([id, name, when, sev, col], i) => {
+      const a = appear(lt, 0.8 + i * 0.45) * o, y = 290 + i * 104, dx = (1 - a) * -24;
+      card(330 + dx, y, 1260, 86, a, 14);
+      text(id, 370 + dx, y + 53, { size: 22, weight: 600, color: ACC1, alpha: a, font: MONO });
+      text(name, 560 + dx, y + 53, { size: 26, weight: 700, alpha: a, font: HEAD });
+      text(when, 930 + dx, y + 53, { size: 21, color: MUTE, alpha: a });
+      g.save(); g.font = `600 16px '${MONO}'`; const w = g.measureText(sev).width + 26; g.restore();
+      chip(1560 - w + dx, y + 52, sev, col, a, "#0B1220");
+    });
+  }],
+  [30.5, 37.5, (lt, o) => {
+    title(lt, "Proof it works", "2 real bugs ", "my own tool found", "", 210, o);
+    const bugs = [["70 / 75", "A rate-limit race", "75 parallel sign-ins against a 20-per-minute limit: 70 got through. Fixed with an atomic Redis counter: now exactly 20 pass."],
+      ["1 IP", "Everyone looked like Cloudflare", "Visitors behind the same Cloudflare edge shared one sign-in limit. Fixed with a secret-signed header and the right hop count."]];
+    bugs.forEach(([num, h, d], i) => {
+      const a = appear(lt, 1.0 + i * 1.1) * o, x = 330 + i * 640, y = 340 + (1 - a) * 20;
+      card(x, y, 610, 360, a);
+      g.save(); g.globalAlpha = a; g.font = `700 76px '${HEAD}'`; g.fillStyle = i ? accentFill(x + 40, x + 300) : HIGH; g.fillText(num, x + 40, y + 110); g.restore();
+      text(h, x + 40, y + 170, { size: 30, weight: 700, alpha: a, font: HEAD });
+      wrap(d, x + 40, y + 220, 530, 36, { size: 22, color: MUTE, alpha: a });
+    });
+  }],
+  [37.5, 45.5, (lt, o) => {
+    title(lt, "Live and private", "Real-time, ", "privacy-first", "", 210, o);
+    const a = appear(lt, 0.9) * o, y = 330 + (1 - a) * 20;
+    card(330, y, 420, 420, a);
+    if (globe) { g.save(); g.globalAlpha = a; rr(350, y + 20, 380, 380, 14); g.clip(); g.drawImage(globe, 350, y + 20, 380, 380); g.restore(); }
+    const items = [["Live feed", "New events reach the dashboard in about 2 seconds (Server-Sent Events)."],
+      ["Privacy", "Emails masked, IPs wiped after 30 days, uploaded logs never stored."],
+      ["Public globe", "Shows attack origins by country only, never an IP address."]];
+    items.forEach(([h, d], i) => {
+      const b = appear(lt, 1.8 + i * 0.8) * o, yy = y + i * 142;
+      card(790, yy, 800, 122, b, 16);
+      text(h, 830, yy + 50, { size: 27, weight: 700, alpha: b, font: HEAD, color: i === 1 ? ACC1 : WHITE });
+      wrap(d, 830, yy + 90, 720, 30, { size: 21, color: MUTE, alpha: b });
+    });
+  }],
+  [45.5, 52.5, (lt, o) => {
+    title(lt, "Under the hood", "A real ", "full-stack", " security build", 210, o);
+    const tech = [["Next.js 16", "TypeScript · App Router"], ["PostgreSQL", "Neon · Drizzle ORM"], ["Server-Sent Events", "Live without WebSockets"], ["Three.js", "3D attack globe"],
+      ["HMAC-SHA256", "Signed, replay-proof intake"], ["2FA (TOTP)", "Written from the RFC"], ["Vercel + Neon", "Free-tier deploy"], ["Claude Code", "AI-assisted development"]];
+    tech.forEach(([h, d], i) => {
+      const a = appear(lt, 0.8 + i * 0.32) * o, col = i % 4, row = Math.floor(i / 4), x = 300 + col * 340, y = 340 + row * 160 + (1 - a) * 18;
+      card(x, y, 310, 130, a, 16);
+      text(h, x + 28, y + 58, { size: 26, weight: 700, alpha: a, font: HEAD });
+      text(d, x + 28, y + 94, { size: 19, color: MUTE, alpha: a });
+    });
+  }],
+  [52.5, 60, (lt, o) => {
+    const stats = [[count(lt, 0.3, 182), "", "automated tests"], [count(lt, 0.5, 6, 1), "", "MITRE ATT&CK rules"], [0, "₹", "hosting cost"]];
+    stats.forEach(([n, pre, l], i) => {
+      const a = appear(lt, 0.2 + i * 0.25) * o, x = 590 + i * 260, y = 260;
+      card(x, y, 230, 150, a, 18);
+      g.save(); g.globalAlpha = a; g.font = `700 58px '${HEAD}'`; g.textAlign = "center";
+      g.fillStyle = accentFill(x + 40, x + 190); g.fillText(pre + n, x + 115, y + 82); g.restore();
+      text(l, x + 115, y + 120, { size: 19, color: MUTE, align: "center", alpha: a });
+    });
+    logo(W / 2, 600, 76, appear(lt, 1.6) * o);
+    const p = appear(lt, 2.4) * o;
+    g.save(); g.globalAlpha = p; g.font = `600 30px '${BODY}'`; const w = g.measureText("guardrail-rasmitha.vercel.app").width + 70;
+    rr(W / 2 - w / 2, 660, w, 64, 32); g.fillStyle = "rgba(111,211,197,0.14)"; g.fill(); g.restore();
+    text("guardrail-rasmitha.vercel.app", W / 2, 703, { size: 30, weight: 600, align: "center", alpha: p });
+    text("github.com/GollapalliRasmitha/guardrail", W / 2, 775, { size: 22, color: MUTE, align: "center", alpha: appear(lt, 2.9) * o });
+    text("Built by Rasmitha Gollapalli", W / 2, 825, { size: 22, color: FAINT, align: "center", alpha: appear(lt, 3.3) * o });
+  }],
+];
+function wrap(s, x, y, maxW, lh, opts) {
+  g.save(); g.font = `${opts.weight || 500} ${opts.size}px '${opts.font || BODY}'`;
+  const words = s.split(" "); let line = "", yy = y;
+  for (const wd of words) { const test = line ? line + " " + wd : wd; if (g.measureText(test).width > maxW && line) { text(line, x, yy, opts); line = wd; yy += lh; } else line = test; }
+  if (line) text(line, x, yy, opts); g.restore();
+}
+function drawAt(t) {
+  bg(t);
+  for (const [s, e, fn] of scenes) {
+    if (t >= s && t < e) { const lt = t - s, out = e === T ? 1 - ease((t - (T - 0.8)) / 0.8) : 1 - ease((lt - (e - s - 0.5)) / 0.5); fn(lt, out); }
+  }
+}
+
+// ---------- music: the same original gentle loop as HomeHaat's videos (WebAudio, no licence needed) ----------
+async function music(seconds) {
+  const sr = 44100, ctx = new OfflineAudioContext(2, Math.ceil(seconds * sr), sr);
+  const master = ctx.createGain(); master.gain.setValueAtTime(0.0001, 0); master.gain.exponentialRampToValueAtTime(0.5, 2.5);
+  master.gain.setValueAtTime(0.5, seconds - 3.5); master.gain.exponentialRampToValueAtTime(0.0001, seconds - 0.2);
+  const comp = ctx.createDynamicsCompressor(); master.connect(comp); comp.connect(ctx.destination);
+  const delay = ctx.createDelay(1); delay.delayTime.value = 0.375; const fb = ctx.createGain(); fb.gain.value = 0.28;
+  const wet = ctx.createGain(); wet.gain.value = 0.35; delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(master);
+  const bpm = 96, beat = 60 / bpm, bar = beat * 4, hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const chords = [[45, 52, 60, 67], [41, 48, 57, 64], [48, 55, 64, 71], [43, 50, 59, 62]]; // a little moodier order for a security story
+  const pad = (t, notes, len) => notes.forEach((m) => [0, 0.07].forEach((det) => {
+    const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), v = ctx.createGain();
+    o.type = "triangle"; o.frequency.value = hz(m) * (1 + det / 100); f.type = "lowpass"; f.frequency.value = 1400;
+    v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(0.045, t + 0.9); v.gain.setValueAtTime(0.045, t + len - 0.6); v.gain.linearRampToValueAtTime(0, t + len + 0.4);
+    o.connect(f); f.connect(v); v.connect(master); o.start(t); o.stop(t + len + 0.5);
+  }));
+  const pluck = (t, m, vel) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = "sine"; o.frequency.value = hz(m);
+    v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(vel, t + 0.01); v.gain.exponentialRampToValueAtTime(0.0008, t + 0.9);
+    o.connect(v); v.connect(master); v.connect(delay); o.start(t); o.stop(t + 1); };
+  const bass = (t, m, len) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = "sine"; o.frequency.value = hz(m - 12);
+    v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(0.12, t + 0.05); v.gain.exponentialRampToValueAtTime(0.01, t + len);
+    o.connect(v); v.connect(master); o.start(t); o.stop(t + len); };
+  const pattern = [0, 2, 1, 3, 2, 1, 3, 2];
+  for (let b = 0, t = 0; t < seconds; b++, t += bar) {
+    const ch = chords[b % 4]; pad(t, ch, bar); bass(t, ch[0], beat * 1.8); bass(t + beat * 2, ch[0], beat * 1.8);
+    if (t > bar * 2 - 0.01) for (let s = 0; s < 8; s++) pluck(t + s * beat / 2, ch[pattern[s]] + 12, s % 2 ? 0.05 : 0.08);
+  }
+  return ctx.startRendering();
+}
+
+async function load() {
+  globe = await new Promise((r) => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = "../../screenshots/globe.png"; });
+  for (const f of [`700 60px '${HEAD}'`, `600 60px '${BODY}'`, `500 60px '${BODY}'`, `600 60px '${MONO}'`, "italic 60px 'Instrument Serif'"]) await document.fonts.load(f);
+  await document.fonts.ready;
+}
+async function render(onProgress) {
+  const frames = T * FPS, vSamples = []; let avcC = null;
+  const ve = new VideoEncoder({ output: (ch, meta) => { if (meta?.decoderConfig?.description) avcC = new Uint8Array(meta.decoderConfig.description); const d = new Uint8Array(ch.byteLength); ch.copyTo(d); vSamples.push({ data: d, key: ch.type === "key" }); }, error: (e) => { throw e; } });
+  ve.configure({ codec: "avc1.640028", width: W, height: H, bitrate: 2_000_000, bitrateMode: "variable", framerate: FPS, avc: { format: "avc" } });
+  for (let f = 0; f < frames; f++) {
+    drawAt(f / FPS);
+    const vf = new VideoFrame(c, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) });
+    ve.encode(vf, { keyFrame: f % (FPS * 2) === 0 }); vf.close();
+    while (ve.encodeQueueSize > 8) await new Promise((r) => setTimeout(r, 2));
+    if (f % 4 === 0) await new Promise((r) => setTimeout(r, 0));
+    if (f % 60 === 0) onProgress(f / frames);
+  }
+  await ve.flush(); ve.close();
+  const buf = await music(T), aSamples = []; let asc = null;
+  const ae = new AudioEncoder({ output: (ch, meta) => { if (meta?.decoderConfig?.description) asc = new Uint8Array(meta.decoderConfig.description); const d = new Uint8Array(ch.byteLength); ch.copyTo(d); aSamples.push({ data: d }); }, error: (e) => { throw e; } });
+  ae.configure({ codec: "mp4a.40.2", sampleRate: 44100, numberOfChannels: 2, bitrate: 128000 });
+  const L = buf.getChannelData(0), R = buf.getChannelData(1);
+  for (let i = 0; i < L.length; i += 4410) {
+    const n = Math.min(4410, L.length - i), pl = new Float32Array(n * 2); pl.set(L.subarray(i, i + n), 0); pl.set(R.subarray(i, i + n), n);
+    const ad = new AudioData({ format: "f32-planar", sampleRate: 44100, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((i * 1e6) / 44100), data: pl });
+    ae.encode(ad); ad.close();
+  }
+  await ae.flush(); ae.close();
+  return writeMp4({ width: W, height: H, timescale: 90000, frameTicks: 3000, avcC, samples: vSamples },
+    { sampleRate: 44100, channels: 2, asc: asc || new Uint8Array([0x12, 0x10]), bitrate: 128000, samples: aSamples });
+}
+window.makeVideo = async () => {
+  await load();
+  const mp4 = await render((p) => (document.title = "rendering " + Math.round(p * 100) + "%"));
+  await fetch("/out/video", { method: "POST", body: mp4 });
+  drawAt(34); await fetch("/out/poster", { method: "POST", body: await new Promise((r) => c.toBlob(r, "image/png")) });
+  return { seconds: T, bytes: mp4.length };
+};
+window.preview = async (t) => { if (!globe) await load(); drawAt(t); return c.toDataURL("image/jpeg", 0.85); };
+</script>

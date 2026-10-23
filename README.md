@@ -9,6 +9,14 @@ mapped to MITRE ATT&CK, raises alerts, emails me about the serious ones and show
 > The dashboard itself has exactly one account (mine, with 2FA). The **demo** shows the same pages with made-up data,
 > clearly labelled, and can't change anything.
 
+## Explainer video (60 s)
+
+[![Watch the GuardRail explainer video](docs/demo/guardrail-explainer-poster.jpg)](docs/demo/guardrail-explainer.mp4)
+
+A one-minute explainer: the attacks live sites face, how signed events become alerts, the six MITRE ATT&CK rules, the
+two real bugs GuardRail found, privacy, and what it's built with. Drawn on a canvas and encoded in Chrome
+([`docs/demo/maker/`](docs/demo/maker/)), with original background music.
+
 ![The home page globe: attacks fly to the servers in Singapore, flash when blocked, and a high alert travels on to India](docs/screenshots/globe.png)
 
 ## Screenshots
