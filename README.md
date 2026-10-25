@@ -11,7 +11,9 @@ mapped to MITRE ATT&CK, raises alerts, emails me about the serious ones and show
 
 ## Explainer video (60 s)
 
-[![Watch the GuardRail explainer video](docs/demo/guardrail-explainer-poster.jpg)](docs/demo/guardrail-explainer.mp4)
+[![Watch the GuardRail explainer video on YouTube](docs/demo/guardrail-explainer-poster.jpg)](https://youtu.be/-Kf0gWaKzsk)
+
+**[▶ Watch on YouTube](https://youtu.be/-Kf0gWaKzsk)** (or [download the MP4](docs/demo/guardrail-explainer.mp4))
 
 A one-minute explainer: the attacks live sites face, how signed events become alerts, the six MITRE ATT&CK rules, the
 two real bugs GuardRail found, privacy, and what it's built with. Drawn on a canvas and encoded in Chrome
